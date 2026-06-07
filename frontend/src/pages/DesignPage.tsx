@@ -12,16 +12,6 @@ import { DagLogColumn } from "../components/DagLogColumn";
 import { useExtendWS } from "../hooks/useExtendWS";
 import type { AtomicAgent } from "../types";
 
-function ThinkingDots() {
-  return (
-    <span className="inline-flex items-center gap-0.5 ml-1">
-      <span className="thinking-dot h-1.5 w-1.5 rounded-full bg-orange-400 inline-block" />
-      <span className="thinking-dot h-1.5 w-1.5 rounded-full bg-orange-400 inline-block" />
-      <span className="thinking-dot h-1.5 w-1.5 rounded-full bg-orange-400 inline-block" />
-    </span>
-  );
-}
-
 /** Modal overlay wrapper */
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
@@ -54,7 +44,7 @@ export function DesignPage() {
   const { pipelineId } = useParams<{ pipelineId: string }>();
   const navigate = useNavigate();
   const { activePipeline, setActivePipeline, upsertSummary } = usePipelineStore();
-  const { isConnected, events, agents, dag, isComplete, phase, phaseMessage, llmTokens } = useDesignStore();
+  const { isConnected, events, agents, dag, isComplete, phase } = useDesignStore();
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [designTrigger, setDesignTrigger] = useState(-1); // -1 = don't auto-start WS
 
@@ -302,57 +292,71 @@ export function DesignPage() {
 
   return (
     <div className="flex flex-col h-full bg-[#0a0e1a] text-white overflow-hidden">
-      <div className="shrink-0 px-5 pt-3 pb-1 flex items-center gap-3">
-        <span className="text-orange-400 text-base">🔥</span>
-        <span className="text-orange-400 font-bold font-mono tracking-widest text-sm shrink-0">DESIGN TIME</span>
-        {isWorking && (
-          <>
-            <span className="text-gray-700 font-mono text-xs shrink-0">·</span>
-            <span className="text-cyan-300 text-xs font-mono truncate">
-              {phaseMessage || "AI is working…"}
-            </span>
-            {llmTokens > 0 && (
-              <span className="text-gray-500 text-xs font-mono shrink-0">
-                · <span className="text-amber-400">{llmTokens.toLocaleString()}</span> tokens
-              </span>
-            )}
-            <ThinkingDots />
-            <button
-              className="ml-auto shrink-0 flex items-center gap-1.5 bg-red-900/50 hover:bg-red-800 text-red-300 border border-red-700/60 text-xs font-bold px-3 py-1 rounded-lg font-mono transition-colors"
-              onClick={stop}
-              title="Stop design process"
-            >
-              ⏹ Stop
-            </button>
-          </>
-        )}
-        {isComplete && (
-          <span className="text-xs text-green-500 font-mono">· {phaseMessage || "Blueprint complete"}</span>
-        )}
-        {!isWorking && !isComplete && phaseMessage && (
-          <span className="text-xs text-gray-600 font-mono truncate">· {phaseMessage}</span>
-        )}
-      </div>
-
-      <div className="shrink-0 mx-4 mb-2 px-4 py-3 border border-gray-700/50 bg-[#0d1117] rounded-xl flex items-center justify-between gap-4">
+      {/* Context bar */}
+      <div className="shrink-0 border-b border-gray-800/60 bg-[#0d1117] px-5 py-2 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
-          <span className="text-cyan-500 text-sm shrink-0">○</span>
-          <span className="text-cyan-500 text-xs font-mono font-bold uppercase tracking-wider shrink-0">Objective</span>
-          <span className="text-gray-200 text-sm truncate font-mono" title={activePipeline?.objective}>
+          <span className="text-white font-bold text-sm font-mono truncate">
+            {activePipeline?.name || "Untitled Pipeline"}
+          </span>
+          <span className="text-gray-700 shrink-0">·</span>
+          <span className="text-gray-500 text-xs font-mono truncate" title={activePipeline?.objective}>
             {activePipeline?.objective || "Loading…"}
           </span>
         </div>
-        <button
-          className={`font-bold px-5 py-2 rounded-lg text-sm font-mono transition-all shrink-0 flex items-center gap-2 ${
-            isWorking
-              ? "bg-gray-700 text-gray-500 cursor-not-allowed"
-              : "bg-cyan-500 hover:bg-cyan-400 text-[#0a0e1a] shadow-lg shadow-cyan-500/20"
-          }`}
-          onClick={() => setDesignTrigger((t) => t < 0 ? 0 : t + 1)}
-          disabled={isWorking}
-        >
-          ✏ {isComplete ? "Re-design" : "Design"}
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            className={`px-3 py-1.5 rounded-lg font-bold text-xs font-mono transition-all ${
+              isWorking
+                ? "bg-gray-800 text-gray-600 cursor-not-allowed"
+                : "bg-cyan-900/50 hover:bg-cyan-800 text-cyan-300 border border-cyan-700/60"
+            }`}
+            onClick={() => setDesignTrigger((t) => t < 0 ? 0 : t + 1)}
+            disabled={isWorking}
+          >
+            {isWorking ? <span className="animate-pulse">⟳ Designing…</span> : isComplete ? "↺ Re-design" : "✏ Design"}
+          </button>
+          {isWorking && (
+            <button
+              className="px-3 py-1.5 rounded-lg font-bold text-xs font-mono bg-red-900/50 hover:bg-red-800 text-red-300 border border-red-700/60 transition-all"
+              onClick={stop}
+            >
+              ⏹ Stop
+            </button>
+          )}
+          <button
+            className={`px-3 py-1.5 rounded-lg font-bold text-xs font-mono transition-all ${
+              isComplete
+                ? "bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700"
+                : "bg-gray-900 text-gray-700 cursor-not-allowed border border-gray-800"
+            }`}
+            disabled={!isComplete}
+            onClick={() => setShowExtend(true)}
+          >
+            ＋ Extend
+          </button>
+          <button
+            className={`px-3 py-1.5 rounded-lg font-bold text-xs font-mono transition-all ${
+              isComplete
+                ? "bg-gray-800 hover:bg-gray-700 text-white border border-gray-700"
+                : "bg-gray-900 text-gray-700 cursor-not-allowed border border-gray-800"
+            }`}
+            disabled={!isComplete}
+            onClick={() => setShowSave(true)}
+          >
+            💾 Save
+          </button>
+          <button
+            className={`px-4 py-1.5 rounded-lg font-bold text-xs font-mono transition-all ${
+              isComplete
+                ? "bg-green-700 hover:bg-green-600 text-white shadow-lg shadow-green-900/30"
+                : "bg-gray-900 text-gray-700 cursor-not-allowed border border-gray-800"
+            }`}
+            disabled={!isComplete}
+            onClick={() => navigate(`/run/${pipelineId}`)}
+          >
+            ▶ Run
+          </button>
+        </div>
       </div>
 
       <ProgressStrip
@@ -365,62 +369,6 @@ export function DesignPage() {
         done={approvedCount}
         mode={isComplete || isConnected ? "design" : "idle"}
       />
-
-      <div className="shrink-0 px-5 py-1.5 border-b border-gray-800/60 bg-[#0a0e1a] flex items-center justify-between text-xs font-mono">
-        <div className="flex items-center gap-3">
-          <span className="bg-cyan-900/50 text-cyan-400 border border-cyan-800/60 px-2 py-0.5 rounded font-bold">
-            — DESIGN
-          </span>
-          <span className="text-gray-600">
-            {isComplete ? "Blueprint complete" : isWorking ? "Blueprint in progress…" : "Ready to design"}
-          </span>
-          {approvedCount > 0 && <span className="text-green-400 font-bold">✓ {approvedCount}</span>}
-          {agentList.length - approvedCount > 0 && isWorking && (
-            <span className="text-amber-400 font-bold animate-pulse">● {agentList.length - approvedCount}</span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Extend button — available once design is complete */}
-          <button
-            className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 text-xs ${
-              isComplete
-                ? "bg-cyan-900/60 hover:bg-cyan-800 text-cyan-300 border border-cyan-700/60"
-                : "bg-gray-800/60 text-gray-700 cursor-not-allowed border border-gray-800"
-            }`}
-            disabled={!isComplete}
-            onClick={() => setShowExtend(true)}
-            title="Add more agents to extend this pipeline"
-          >
-            ＋ Extend
-          </button>
-          {/* Save button */}
-          <button
-            className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 text-xs ${
-              isComplete
-                ? "bg-gray-700 hover:bg-gray-600 text-white border border-gray-600"
-                : "bg-gray-800/60 text-gray-700 cursor-not-allowed border border-gray-800"
-            }`}
-            disabled={!isComplete}
-            onClick={() => setShowSave(true)}
-            title="Save pipeline with a name"
-          >
-            💾 Save
-          </button>
-          {/* Run button */}
-          <button
-            className={`px-4 py-1.5 rounded-lg font-bold transition-all flex items-center gap-2 text-xs ${
-              isComplete
-                ? "bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-700/30"
-                : "bg-gray-800/60 text-gray-700 cursor-not-allowed border border-gray-800"
-            }`}
-            disabled={!isComplete}
-            onClick={() => navigate(`/run/${pipelineId}`)}
-            title="Run this pipeline"
-          >
-            ▶ Run
-          </button>
-        </div>
-      </div>
 
       <PanelGroup direction="horizontal" className="flex-1 overflow-hidden">
         <Panel defaultSize={22} minSize={14} className="border-r border-gray-800/60 p-3 overflow-hidden">

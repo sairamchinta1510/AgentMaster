@@ -11,16 +11,6 @@ import { RunDetailColumn } from "../components/RunDetailColumn";
 import { DagLogColumn } from "../components/DagLogColumn";
 import type { InputField, DAGData } from "../types";
 
-function ThinkingDots() {
-  return (
-    <span className="inline-flex items-center gap-0.5 ml-1">
-      <span className="thinking-dot h-1.5 w-1.5 rounded-full bg-purple-400 inline-block" />
-      <span className="thinking-dot h-1.5 w-1.5 rounded-full bg-purple-400 inline-block" />
-      <span className="thinking-dot h-1.5 w-1.5 rounded-full bg-purple-400 inline-block" />
-    </span>
-  );
-}
-
 function summarizeRunEvent(event: { type: string; [k: string]: unknown }): string {
   switch (event.type) {
     case "RUN_STARTED":   return `Run started for: ${event.objective ?? event.run_id}`;
@@ -162,35 +152,42 @@ export function RunPage() {
 
   return (
     <div className="flex flex-col h-full bg-[#0a0e1a] text-white overflow-hidden">
-      <div className="shrink-0 px-5 pt-3 pb-1 flex items-center gap-3">
-        <span className="text-purple-400 text-base">▶</span>
-        <span className="text-purple-400 font-bold font-mono tracking-widest text-sm">RUN TIME</span>
-        {isRunning && (
-          <span className="flex items-center text-xs text-gray-600 font-mono">
-            · Executing agents<ThinkingDots />
-          </span>
-        )}
-        {isComplete && (
-          <span className={`text-xs font-mono ${failedCount > 0 ? "text-orange-400" : "text-green-500"}`}>
-            · {failedCount > 0 ? `Completed with ${failedCount} failure(s)` : "All agents completed"}
-          </span>
-        )}
-      </div>
-
-      <div className="shrink-0 mx-4 mb-2 px-4 py-3 border border-gray-700/50 bg-[#120a24] rounded-xl flex items-center justify-between gap-4">
+      {/* Context bar */}
+      <div className="shrink-0 border-b border-gray-800/60 bg-[#0d1117] px-5 py-2 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
-          <span className="text-purple-500 text-sm shrink-0">▶</span>
-          <span className="text-purple-500 text-xs font-mono font-bold uppercase tracking-wider shrink-0">Run</span>
-          <span className="text-gray-200 text-sm truncate font-mono" title={activePipeline?.objective}>
+          <span className="text-white font-bold text-sm font-mono truncate">
             {activePipeline?.name || "Loading…"}
           </span>
+          <span className="text-gray-700 shrink-0">·</span>
+          <span className="text-gray-500 text-xs font-mono truncate" title={activePipeline?.objective}>
+            {activePipeline?.objective}
+          </span>
+          {isRunning && (
+            <span className="text-xs font-mono text-purple-400 animate-pulse shrink-0">· Running…</span>
+          )}
+          {isComplete && (
+            <span className={`text-xs font-mono shrink-0 ${failedCount > 0 ? "text-orange-400" : "text-green-400"}`}>
+              · {failedCount > 0 ? `${failedCount} failure(s)` : "Complete ✓"}
+            </span>
+          )}
         </div>
-        <button
-          className="text-gray-500 hover:text-cyan-400 text-xs font-mono transition-colors"
-          onClick={() => navigate(`/design/${pipelineId}`)}
-        >
-          ✏ Edit Design
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            className="px-3 py-1.5 rounded-lg font-bold text-xs font-mono bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white border border-gray-700 transition-all"
+            onClick={() => navigate(`/design/${pipelineId}`)}
+          >
+            ✏ Edit Design
+          </button>
+          {isComplete && (
+            <button
+              className="px-4 py-1.5 rounded-lg font-bold text-xs font-mono bg-green-700 hover:bg-green-600 text-white transition-all disabled:opacity-50"
+              onClick={handleStartRun}
+              disabled={starting}
+            >
+              {starting ? "Starting…" : "▶ Run Again"}
+            </button>
+          )}
+        </div>
       </div>
 
       <ProgressStrip
@@ -203,16 +200,6 @@ export function RunPage() {
         done={doneCount}
         mode={isRunning || isComplete ? "run" : "idle"}
       />
-
-      <div className="shrink-0 px-5 py-1.5 border-b border-gray-800/60 bg-[#0a0e1a] flex items-center justify-between text-xs font-mono">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="bg-purple-900/50 text-purple-300 border border-purple-700/50 px-2 py-0.5 rounded font-bold">▶ RUN TIME</span>
-          {doneCount > 0 && <span className="bg-green-900/50 text-green-300 border border-green-800/50 px-2 py-0.5 rounded">{doneCount} done</span>}
-          {failedCount > 0 && <span className="bg-red-900/50 text-red-300 border border-red-800/50 px-2 py-0.5 rounded">{failedCount} failed</span>}
-          {isRunning && <span className="bg-purple-900/50 text-purple-300 border border-purple-700/50 px-2 py-0.5 rounded animate-pulse">1 running</span>}
-        </div>
-        <div className="text-gray-600">{elapsed > 0 ? `${elapsed}s elapsed` : ""}</div>
-      </div>
 
       {!hasBlueprint ? (
         <div className="flex-1 flex items-center justify-center">
