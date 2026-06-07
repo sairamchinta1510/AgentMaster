@@ -1,0 +1,107 @@
+import json
+import logging
+from openai import AsyncOpenAI
+from app.prompts.critique import get_critique_prompt
+from app.models.agent import AtomicAgent, CritiqueResult, CritiqueVerdict, CritiqueIssue
+
+logger = logging.getLogger(__name__)
+
+
+class AgentCritiqueAgent:
+    def __init__(self, api_key: str, model: str = "gpt-4o"):
+        self._api_key = api_key
+        self.client = AsyncOpenAI(api_key=api_key) if api_key != "fake" else None
+        self.model = model
+
+    async def _call_llm(
+        self,
+        agent: AtomicAgent,
+        phase: str,
+        iteration: int,
+        previous_issues: list | None = None,
+    ) -> dict:
+        prompt = get_critique_prompt(
+            agent.model_dump(exclude={"critique_history"}), phase, iteration, previous_issues
+        )
+        assert self.client is not None
+        response = await self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": prompt},
+                {
+                    "role": "user",
+                    "content": f"Critique agent {agent.agent_name} — iteration {iteration} of 5",
+                },
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.1,
+        )
+        return json.loads(response.choices[0].message.content)
+
+    async def critique(
+        self,
+        agent: AtomicAgent,
+        phase: str,
+        iteration: int,
+        previous_issues: list | None = None,
+    ) -> CritiqueResult:
+        data = await self._call_llm(agent, phase, iteration, previous_issues)
+        issues = [CritiqueIssue(**i) for i in data.get("issues", [])]
+        return CritiqueResult(
+            critique_id=data.get(
+                "critique_id", f"{agent.agent_id}_critique_iter_{iteration}"
+            ),
+            target_agent=agent.agent_id,
+            target_agent_name=agent.agent_name,
+            phase=phase,
+            iteration=iteration,
+            max_iterations=5,
+            verdict=CritiqueVerdict(data["verdict"]),
+            quality_score=float(data.get("quality_score", 0)),
+            errors_remaining=int(data.get("errors_remaining", 0)),
+            issues=issues,
+            approved_aspects=data.get("approved_aspects", []),
+            improvements_made=data.get("improvements_made_this_iteration", []),
+            remaining_errors=data.get("remaining_errors", []),
+            suggested_new_agents=data.get("suggested_new_agents", []),
+            missing_user_inputs=data.get("missing_user_inputs", []),
+        )
+
+
+async def run_critique_loop(
+    agent: AtomicAgent,
+    critique_agent: AgentCritiqueAgent,
+    producer_agent,
+    phase: str,
+    max_iterations: int = 5,
+) -> tuple[CritiqueResult, AtomicAgent, int]:
+    """Run the up-to-5-iteration critique loop.
+
+    Returns (final_result, final_agent, iterations_used).
+    Errors NEVER pass forward — escalates after max_iterations if still failing.
+    """
+    previous_issues: list[dict] = []
+    final_result: CritiqueResult | None = None
+
+    for iteration in range(1, max_iterations + 1):
+        result = await critique_agent.critique(
+            agent, phase, iteration, previous_issues or None
+        )
+        agent.critique_iterations = iteration
+        agent.critique_history.append(result)
+        final_result = result
+
+        if result.verdict == CritiqueVerdict.APPROVED:
+            agent.quality_score = result.quality_score
+            return result, agent, iteration
+
+        previous_issues = [i.model_dump() for i in result.issues]
+        if iteration < max_iterations:
+            agent = await producer_agent.revise(agent, previous_issues, phase)
+
+    # After max_iterations — escalate: errors must NEVER pass forward
+    assert final_result is not None
+    if final_result.errors_remaining > 0:
+        final_result.verdict = CritiqueVerdict.ESCALATE_AUTO_FIX
+
+    return final_result, agent, max_iterations
