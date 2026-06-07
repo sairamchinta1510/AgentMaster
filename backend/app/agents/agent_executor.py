@@ -107,6 +107,13 @@ class AgentExecutorAgent:
             )
             plan = json.loads(plan_response.choices[0].message.content)
 
+            # Validate plan response structure
+            action = plan.get("action")
+            if action not in ("NO_CODE_NEEDED", "EXECUTE_CODE"):
+                raise ValueError(f"LLM returned unknown action: {action!r}. Expected NO_CODE_NEEDED or EXECUTE_CODE.")
+            if action == "EXECUTE_CODE" and not plan.get("code", "").strip():
+                raise ValueError("LLM returned EXECUTE_CODE but provided no code.")
+
             # ── FALLBACK: pure reasoning ──────────────────────────────────────
             if plan.get("action") == "NO_CODE_NEEDED":
                 await emit("fallback")

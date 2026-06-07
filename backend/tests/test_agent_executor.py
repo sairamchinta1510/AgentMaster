@@ -45,7 +45,8 @@ async def test_execute_code_path():
         call_count += 1
         return r
 
-    with patch.object(executor.client.chat.completions, "create", new=mock_create):
+    with patch.object(executor.client.chat.completions, "create", new=mock_create), \
+         patch("app.agents.agent_executor.execute_python_code", new=AsyncMock(return_value=("test output\n", "", 0))):
         result = await executor.execute(AGENT_SPEC, {})
 
     assert result.status == "completed"
@@ -68,3 +69,16 @@ async def test_code_event_callback_called():
 
     assert "planning" in phases
     assert "fallback" in phases
+
+
+@pytest.mark.asyncio
+async def test_invalid_action_raises():
+    executor = AgentExecutorAgent()
+    plan_response = MagicMock()
+    plan_response.choices[0].message.content = '{"action": "UNKNOWN_ACTION"}'
+
+    with patch.object(executor.client.chat.completions, "create", new=AsyncMock(return_value=plan_response)):
+        result = await executor.execute(AGENT_SPEC, {})
+
+    assert result.status == "failed"
+    assert "unknown action" in (result.error or "").lower()
