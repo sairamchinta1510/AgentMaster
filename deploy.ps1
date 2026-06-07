@@ -3,10 +3,19 @@
 # Or set env var GEMINI_API_KEY before running
 
 param(
-    [string]$ApiKey = $env:GEMINI_API_KEY,
+    [string]$ApiKey = "",
     [string]$Region = "europe-west1",
     [string]$ServiceName = "agentmaster"
 )
+
+# Auto-read GEMINI_API_KEY from backend/.env if not passed
+if (-not $ApiKey) {
+    $envFile = Join-Path $PSScriptRoot "backend\.env"
+    if (Test-Path $envFile) {
+        $match = Select-String -Path $envFile -Pattern "^GEMINI_API_KEY=(.+)$"
+        if ($match) { $ApiKey = $match.Matches[0].Groups[1].Value.Trim() }
+    }
+}
 
 $PROJECT = (gcloud config get-value project 2>$null).Trim()
 if (-not $PROJECT) { Write-Error "No GCP project set. Run: gcloud config set project YOUR_PROJECT"; exit 1 }

@@ -15,6 +15,17 @@ def make_llm_client() -> tuple[AsyncOpenAI, str]:
     ), settings.active_model
 
 
+def _normalize_user_inputs(raw: list) -> list[dict]:
+    """Coerce LLM output to list[dict] — LLMs sometimes return list[str]."""
+    result = []
+    for item in raw:
+        if isinstance(item, str):
+            result.append({"name": item, "type": "string", "description": item, "required": True})
+        elif isinstance(item, dict):
+            result.append(item)
+    return result
+
+
 class AgentProducerAgent:
     def __init__(self, api_key: str | None = None, model: str | None = None):
         self.client, self.model = make_llm_client()
@@ -50,7 +61,7 @@ class AgentProducerAgent:
             input_schema=data.get("input_schema", {}),
             output_schema=data.get("output_schema", {}),
             error_schema=data.get("error_schema", {}),
-            required_user_inputs=data.get("required_user_inputs", []),
+            required_user_inputs=_normalize_user_inputs(data.get("required_user_inputs", [])),
             timeout_seconds=data.get("timeout_seconds", 60),
             retry_policy=data.get(
                 "retry_policy", {"max_retries": 3, "backoff": "exponential"}

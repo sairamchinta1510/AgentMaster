@@ -1,3 +1,70 @@
+// ── V2 types ────────────────────────────────────────────────────────────────
+
+export interface InputField {
+  name: string;
+  type: "string" | "url" | "credential" | "file" | "selection";
+  description: string;
+  required: boolean;
+}
+
+export interface Pipeline {
+  id: string;
+  objective: string;
+  name: string;
+  input_schema: InputField[];
+  blueprint: Record<string, unknown>;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface PipelineSummary {
+  id: string;
+  objective: string;
+  name: string;
+  agent_count: number;
+  created_at: string | null;
+}
+
+export interface AgentResult {
+  agent_id: string;
+  agent_name: string;
+  status: "completed" | "failed" | "skipped";
+  output: Record<string, unknown>;
+  error: string | null;
+  duration_ms: number | null;
+}
+
+export interface Run {
+  id: string;
+  pipeline_id: string;
+  inputs: Record<string, string>;
+  status: "pending" | "running" | "completed" | "failed";
+  results: AgentResult[];
+  created_at: string | null;
+  completed_at: string | null;
+}
+
+export type DesignWSEvent =
+  | { type: "DESIGN_STARTED"; pipeline_id: string; objective: string }
+  | { type: "PHASE_UPDATE"; pipeline_id: string; phase: string; message: string }
+  | { type: "BLUEPRINT_READY"; pipeline_id: string; blueprint: Record<string, unknown> }
+  | { type: "DAG_BUILT"; pipeline_id: string; dag: DAGData }
+  | { type: "AGENT_STARTED"; pipeline_id: string; agent_id: string; agent_name: string; state: AgentState }
+  | { type: "AGENT_PRODUCED"; pipeline_id: string; agent_id: string; spec: AtomicAgent }
+  | { type: "CRITIQUE_COMPLETE"; pipeline_id: string; agent_id: string; iterations: number; verdict: CritiqueVerdict; quality_score: number; critique: CritiqueResult }
+  | { type: "AGENT_STATE_CHANGE"; pipeline_id: string; agent_id: string; state: AgentState }
+  | { type: "DESIGN_COMPLETE"; pipeline_id: string; message: string; agent_count: number; approved_count: number; input_schema: InputField[] }
+  | { type: "ERROR"; pipeline_id: string; message: string };
+
+export type RunWSEvent =
+  | { type: "RUN_STARTED"; run_id: string; pipeline_id: string; objective: string; inputs: Record<string, string> }
+  | { type: "AGENT_STARTED"; run_id: string; agent_id: string; agent_name: string }
+  | { type: "AGENT_RESULT"; run_id: string; agent_id: string; agent_name: string; status: string; output: Record<string, unknown>; error: string | null; duration_ms: number | null }
+  | { type: "RUN_COMPLETE"; run_id: string; status: string; total_agents: number; completed: number; failed: number; results: AgentResult[] }
+  | { type: "ERROR"; run_id: string; message: string };
+
+// ── V1 types (kept for existing components) ─────────────────────────────────
+
 export type Phase = "DESIGN" | "DRYRUN" | "RUN" | "COMPLETED";
 
 export type AgentState =
