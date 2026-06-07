@@ -82,6 +82,9 @@ interface CritiqueDetailColumnProps {
 }
 
 export function CritiqueDetailColumn({ agent, agentIndex }: CritiqueDetailColumnProps) {
+  const llmStreamText = useDesignStore((s) => s.llmStreamText);
+  const [aspectsOpen, setAspectsOpen] = useState(false);
+
   if (!agent) {
     return (
       <div className="flex h-full items-center justify-center text-gray-700 text-xs font-mono">
@@ -95,8 +98,6 @@ export function CritiqueDetailColumn({ agent, agentIndex }: CritiqueDetailColumn
   const isApproved = agent.state === "APPROVED" || agent.state === "COMPLETED";
   const isCritiquing = agent.state.startsWith("DESIGN_CRITIQUE");
   const currentRound = isCritiquing ? agent.state.slice(-1) : null;
-  const llmStreamText = useDesignStore((s) => s.llmStreamText);
-  const [aspectsOpen, setAspectsOpen] = useState(false);
 
   const circled = agentIndex != null ? (CIRCLED[agentIndex] ?? `${agentIndex + 1}`) : "";
 
