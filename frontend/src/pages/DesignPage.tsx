@@ -113,6 +113,7 @@ export function DesignPage() {
 
   useEffect(() => {
     if (!pipelineId) return;
+    useDesignStore.getState().reset();
     getPipeline(pipelineId)
       .then((r) => {
         setActivePipeline(r.data);
