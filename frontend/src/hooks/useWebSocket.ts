@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useSessionStore } from "../store/sessionStore";
 import type { WSEvent, AtomicAgent } from "../types";
 
-const WS_BASE = import.meta.env.VITE_WS_URL || "ws://localhost:8000";
+const WS_BASE = import.meta.env.VITE_WS_URL || "ws://localhost:8001";
 
 export function useWebSocket(sessionId: string | null) {
   const ws = useRef<WebSocket | null>(null);

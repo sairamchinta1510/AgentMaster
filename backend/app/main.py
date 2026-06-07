@@ -1,8 +1,8 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.api.routes import sessions, library, agents
-from app.api import websocket
+from app.api.websocket import websocket_endpoint
 from app.db import Base, engine
 
 # Create all ORM tables on startup
@@ -25,7 +25,11 @@ app.add_middleware(
 app.include_router(sessions.router)
 app.include_router(library.router)
 app.include_router(agents.router)
-app.include_router(websocket.router)
+
+
+@app.websocket("/ws/{session_id}")
+async def ws_handler(ws: WebSocket, session_id: str):
+    await websocket_endpoint(ws, session_id)
 
 
 @app.get("/health", tags=["system"])
