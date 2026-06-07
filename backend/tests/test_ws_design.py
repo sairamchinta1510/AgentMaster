@@ -6,7 +6,7 @@ from app.agents.agent_master import AgentMasterAgent
 from app.agents.agent_producer import AgentProducerAgent
 from app.config import settings
 from app.main import app
-from app.models.agent import AtomicAgent, CritiqueResult, CritiqueVerdict
+from app.models.agent import AgentState, AtomicAgent, CritiqueResult, CritiqueVerdict
 
 
 def _approved_critique(agent_id: str, agent_name: str, iteration: int = 1) -> CritiqueResult:
@@ -42,9 +42,26 @@ def test_ws_design_replaces_decomposed_node_with_series():
     middle_part_1 = AtomicAgent(agent_id="middle_part_1", agent_name="ParseAgent", session_id="s1")
     middle_part_2 = AtomicAgent(agent_id="middle_part_2", agent_name="AnalyzeAgent", session_id="s1")
 
+    decomp_trigger_critique = CritiqueResult(
+        critique_id="middle_critique_iter_2",
+        target_agent="middle",
+        target_agent_name="MiddleAgent",
+        phase="design_time",
+        iteration=2,
+        verdict=CritiqueVerdict.NEEDS_REVISION,
+        quality_score=3.0,
+        errors_remaining=1,
+    )
+    middle_part_1.critique_history = [
+        _approved_critique("middle_part_1", "ParseAgent")
+    ]
+    middle_part_2.critique_history = [
+        _approved_critique("middle_part_2", "AnalyzeAgent")
+    ]
+
     critique_results = [
         (_approved_critique("fetch", "FetchAgent"), [fetch_agent], 1),
-        (_approved_critique("middle", "MiddleAgent", iteration=2), [middle_part_1, middle_part_2], 2),
+        (decomp_trigger_critique, [middle_part_1, middle_part_2], 2),
         (_approved_critique("publish", "PublishAgent"), [publish_agent], 1),
     ]
 
@@ -92,9 +109,18 @@ def test_ws_design_replaces_decomposed_node_with_series():
     critique_complete_ids = [
         event["agent_id"] for event in events if event["type"] == "CRITIQUE_COMPLETE"
     ]
-    state_change_ids = [
-        event["agent_id"] for event in events if event["type"] == "AGENT_STATE_CHANGE"
-    ]
+    subagent_critiques = {
+        event["agent_id"]: event
+        for event in events
+        if event["type"] == "CRITIQUE_COMPLETE" and event["agent_id"] in {"middle_part_1", "middle_part_2"}
+    }
+    subagent_states = {
+        event["agent_id"]: event["state"]
+        for event in events
+        if event["type"] == "AGENT_STATE_CHANGE" and event["agent_id"] in {"middle_part_1", "middle_part_2"}
+    }
+    state_change_ids = [event["agent_id"] for event in events if event["type"] == "AGENT_STATE_CHANGE"]
+    design_complete = next(event for event in events if event["type"] == "DESIGN_COMPLETE")
 
     assert "middle" not in critique_complete_ids
     assert "middle" not in state_change_ids
@@ -102,3 +128,10 @@ def test_ws_design_replaces_decomposed_node_with_series():
     assert "middle_part_2" in critique_complete_ids
     assert "middle_part_1" in state_change_ids
     assert "middle_part_2" in state_change_ids
+    assert subagent_critiques["middle_part_1"]["verdict"] == CritiqueVerdict.APPROVED
+    assert subagent_critiques["middle_part_2"]["verdict"] == CritiqueVerdict.APPROVED
+    assert subagent_states["middle_part_1"] == AgentState.APPROVED
+    assert subagent_states["middle_part_2"] == AgentState.APPROVED
+    assert design_complete["agent_count"] == 4
+    assert design_complete["approved_count"] == 4
+    assert design_complete["message"] == "Design complete. 4/4 agents approved."

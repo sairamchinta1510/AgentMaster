@@ -58,6 +58,7 @@ async def ws_design_handler(websocket: WebSocket, pipeline_id: str):
         producer = AgentProducerAgent()
         critique_agent = AgentCritiqueAgent()
         approved_count = 0
+        final_agent_count = 0
 
         for i, agent_spec in enumerate(blueprint.get("agents", []), 1):
             agent_name = agent_spec.get("agent_name", "Agent")
@@ -150,18 +151,28 @@ async def ws_design_handler(websocket: WebSocket, pipeline_id: str):
                 )
 
             for final_agent in result_agents:
+                final_agent_count += 1
+                agent_critique = (
+                    final_agent.critique_history[-1]
+                    if len(result_agents) > 1 and final_agent.critique_history
+                    else final_critique
+                )
                 await send(
                     "CRITIQUE_COMPLETE",
                     {
                         "agent_id": final_agent.agent_id,
                         "iterations": iterations,
-                        "verdict": final_critique.verdict,
-                        "quality_score": final_critique.quality_score,
-                        "critique": final_critique.model_dump(),
+                        "verdict": agent_critique.verdict,
+                        "quality_score": agent_critique.quality_score,
+                        "critique": agent_critique.model_dump(),
                     },
                 )
 
-                state = AgentState.APPROVED if final_critique.errors_remaining == 0 else AgentState.USER_ESCALATED
+                state = (
+                    AgentState.APPROVED
+                    if agent_critique.errors_remaining == 0
+                    else AgentState.USER_ESCALATED
+                )
                 if state == AgentState.APPROVED:
                     approved_count += 1
                 await send("AGENT_STATE_CHANGE", {"agent_id": final_agent.agent_id, "state": state})
@@ -194,8 +205,8 @@ async def ws_design_handler(websocket: WebSocket, pipeline_id: str):
         await send(
             "DESIGN_COMPLETE",
             {
-                "message": f"Design complete. {approved_count}/{len(blueprint.get('agents', []))} agents approved.",
-                "agent_count": len(blueprint.get("agents", [])),
+                "message": f"Design complete. {approved_count}/{final_agent_count} agents approved.",
+                "agent_count": final_agent_count,
                 "approved_count": approved_count,
                 "input_schema": input_fields,
             },
