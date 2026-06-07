@@ -3,7 +3,7 @@ import { wsUrl } from "../api/client";
 import { useDesignStore } from "../store/runStore";
 import type { DesignWSEvent, AtomicAgent } from "../types";
 
-export function useDesignWS(pipelineId: string | null) {
+export function useDesignWS(pipelineId: string | null, trigger: number = 0) {
   const ws = useRef<WebSocket | null>(null);
   const store = useDesignStore();
 
@@ -64,7 +64,7 @@ export function useDesignWS(pipelineId: string | null) {
     return () => {
       socket.close();
     };
-  }, [pipelineId]);
+  }, [pipelineId, store, trigger]);
 
   return ws;
 }

@@ -103,15 +103,16 @@ export function DagLogColumn({ dag, agentStates, logs, inputFields, mode }: DagL
 
       {/* Log */}
       <div className="flex flex-col flex-1 min-h-0">
-        <div className="text-xs text-gray-600 mb-2 shrink-0 uppercase tracking-widest">
+        <div className="text-xs text-gray-600 mb-2 shrink-0 uppercase tracking-widest flex items-center gap-2">
           {mode === "design" ? "Design Log" : "Run Log"}
+          {logs.length > 0 && <span className="h-1.5 w-1.5 rounded-full bg-cyan-500 animate-pulse inline-block" />}
         </div>
         <div className="flex-1 bg-[#0a0a0a] border border-gray-800 rounded-lg overflow-y-auto p-3 text-xs min-h-0">
           {logs.length === 0 && (
             <div className="text-gray-800 text-center py-6">waiting…</div>
           )}
           {[...logs].reverse().map((entry, i) => (
-            <div key={i} className={`${LOG_COLOR[entry.type] || "text-gray-500"} mb-1 leading-relaxed`}>
+            <div key={i} className={`${LOG_COLOR[entry.type] || "text-gray-500"} mb-1 leading-relaxed animate-fade-in`}>
               <span className="text-gray-800">[{entry.type}]</span> {entry.text}
             </div>
           ))}

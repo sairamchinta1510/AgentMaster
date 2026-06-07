@@ -3,16 +3,16 @@ import type { AtomicAgent, AgentResult } from "../types";
 
 const CIRCLED = ["①","②","③","④","⑤","⑥","⑦","⑧","⑨","⑩","⑪","⑫","⑬","⑭","⑮","⑯","⑰","⑱","⑲","⑳"];
 
-function cardColors(state: AtomicAgent["state"]): { border: string; bg: string; numColor: string } {
+function cardColors(state: AtomicAgent["state"]): { border: string; bg: string; numColor: string; glow: string } {
   if (state === "APPROVED" || state === "COMPLETED")
-    return { border: "border-l-green-500", bg: "bg-[#071c0f]", numColor: "text-green-400" };
+    return { border: "border-l-green-500", bg: "bg-[#071c0f]", numColor: "text-green-400", glow: "" };
   if (state.startsWith("DESIGN_CRITIQUE") || state === "REVISING_SPEC" || state === "AUTO_FIX")
-    return { border: "border-l-amber-500", bg: "bg-[#1a1200]", numColor: "text-amber-400" };
+    return { border: "border-l-amber-500", bg: "bg-[#1a1200]", numColor: "text-amber-400", glow: "animate-glow-amber" };
   if (state === "SPECIFYING")
-    return { border: "border-l-cyan-500", bg: "bg-[#071828]", numColor: "text-cyan-400" };
+    return { border: "border-l-cyan-500", bg: "bg-[#071828]", numColor: "text-cyan-400", glow: "animate-glow-cyan" };
   if (state === "FAILED_ESCALATED")
-    return { border: "border-l-red-500", bg: "bg-[#1a0707]", numColor: "text-red-400" };
-  return { border: "border-l-gray-700", bg: "bg-gray-900", numColor: "text-gray-600" };
+    return { border: "border-l-red-500", bg: "bg-[#1a0707]", numColor: "text-red-400", glow: "" };
+  return { border: "border-l-gray-700", bg: "bg-gray-900", numColor: "text-gray-600", glow: "" };
 }
 
 function designStateBadge(state: AtomicAgent["state"]): { label: string; cls: string } {
@@ -71,14 +71,14 @@ export function DesignAgentList({ agents, selectedId, onSelect }: DesignAgentLis
           </div>
         )}
         {agents.map((a, idx) => {
-          const { border, bg, numColor } = cardColors(a.state);
+          const { border, bg, numColor, glow } = cardColors(a.state);
           const { label, cls } = designStateBadge(a.state);
           const isSelected = a.agent_id === selectedId;
           return (
             <button
               key={a.agent_id}
               onClick={() => onSelect(a.agent_id)}
-              className={`w-full text-left border-l-4 rounded-xl p-3 transition-all font-mono ${border} ${bg} ${
+              className={`w-full text-left border-l-4 rounded-xl p-3 transition-all font-mono animate-fade-in ${border} ${bg} ${glow} ${
                 isSelected ? "ring-1 ring-gray-500" : "hover:brightness-125"
               }`}
             >
@@ -124,17 +124,17 @@ export function RunAgentList({ agents, results, runningId, selectedId, onSelect 
           const result = results[a.agent_id];
           const isRunning = a.agent_id === runningId;
           const isSelected = a.agent_id === selectedId;
-          const { border, bg, numColor } =
-            result?.status === "completed" ? { border: "border-l-green-500", bg: "bg-[#071c0f]", numColor: "text-green-400" } :
-            result?.status === "failed"    ? { border: "border-l-red-500",   bg: "bg-[#1a0707]", numColor: "text-red-400" } :
-            isRunning                      ? { border: "border-l-purple-500", bg: "bg-[#110a24]", numColor: "text-purple-400" } :
-                                             { border: "border-l-gray-700",   bg: "bg-gray-900",  numColor: "text-gray-600" };
+          const { border, bg, numColor, glow } =
+            result?.status === "completed" ? { border: "border-l-green-500", bg: "bg-[#071c0f]", numColor: "text-green-400", glow: "" } :
+            result?.status === "failed"    ? { border: "border-l-red-500",   bg: "bg-[#1a0707]", numColor: "text-red-400", glow: "" } :
+            isRunning                      ? { border: "border-l-purple-500", bg: "bg-[#110a24]", numColor: "text-purple-400", glow: "animate-glow-purple" } :
+                                             { border: "border-l-gray-700",   bg: "bg-gray-900",  numColor: "text-gray-600", glow: "" };
 
           return (
             <button
               key={a.agent_id}
               onClick={() => onSelect(a.agent_id)}
-              className={`w-full text-left border-l-4 rounded-xl p-3 transition-all font-mono ${border} ${bg} ${
+              className={`w-full text-left border-l-4 rounded-xl p-3 transition-all font-mono animate-fade-in ${border} ${bg} ${glow} ${
                 isSelected ? "ring-1 ring-gray-500" : "hover:brightness-125"
               }`}
             >

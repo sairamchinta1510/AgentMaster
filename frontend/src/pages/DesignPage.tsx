@@ -10,6 +10,16 @@ import { CritiqueDetailColumn } from "../components/CritiqueDetailColumn";
 import { DagLogColumn } from "../components/DagLogColumn";
 import type { AtomicAgent } from "../types";
 
+function ThinkingDots() {
+  return (
+    <span className="inline-flex items-center gap-0.5 ml-1">
+      <span className="thinking-dot h-1.5 w-1.5 rounded-full bg-orange-400 inline-block" />
+      <span className="thinking-dot h-1.5 w-1.5 rounded-full bg-orange-400 inline-block" />
+      <span className="thinking-dot h-1.5 w-1.5 rounded-full bg-orange-400 inline-block" />
+    </span>
+  );
+}
+
 function summarizeEvent(event: { type: string; [k: string]: unknown }): string {
   switch (event.type) {
     case "PHASE_UPDATE":      return `${event.phase} — ${event.message}`;
@@ -28,10 +38,10 @@ export function DesignPage() {
   const navigate = useNavigate();
   const { activePipeline, setActivePipeline, upsertSummary } = usePipelineStore();
   const { isConnected, events, agents, dag, isComplete, phase } = useDesignStore();
-
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [designTrigger, setDesignTrigger] = useState(0);
 
-  useDesignWS(pipelineId ?? null);
+  useDesignWS(pipelineId ?? null, designTrigger);
 
   useEffect(() => {
     if (!pipelineId) return;
@@ -49,14 +59,13 @@ export function DesignPage() {
         });
       })
       .catch(() => {});
-  }, [pipelineId]);
+  }, [pipelineId, setActivePipeline, upsertSummary]);
 
   const agentList: AtomicAgent[] = Object.values(agents);
   const approvedCount = agentList.filter(
     (a) => a.state === "APPROVED" || a.state === "COMPLETED"
   ).length;
 
-  // Auto-select first active or first agent
   useEffect(() => {
     if (selectedAgentId) return;
     const active = agentList.find(
@@ -64,9 +73,8 @@ export function DesignPage() {
     );
     const target = active ?? agentList[0];
     if (target) setSelectedAgentId(target.agent_id);
-  }, [agents]);
+  }, [agentList, selectedAgentId]);
 
-  // Build progress strip pills
   const pills: StepPill[] = agentList.map((a) => {
     const isCritiquing =
       a.state.startsWith("DESIGN_CRITIQUE") ||
@@ -74,21 +82,20 @@ export function DesignPage() {
       a.state === "AUTO_FIX";
     const roundNum = a.state.startsWith("DESIGN_CRITIQUE") ? a.state.slice(-1) : null;
     const isDone = a.state === "APPROVED" || a.state === "COMPLETED";
-    const isErr  = a.state === "FAILED_ESCALATED";
+    const isErr = a.state === "FAILED_ESCALATED";
     return {
       id: a.agent_id,
       label: a.agent_name,
       state: isDone ? "done" : isErr ? "error" :
-             isCritiquing || a.state === "SPECIFYING" ? "active-design" : "pending",
+        isCritiquing || a.state === "SPECIFYING" ? "active-design" : "pending",
       detail: isCritiquing && roundNum ? `r${roundNum}/5` : undefined,
     };
   });
 
-  // Live narration — split agent name for highlight
   const activeAgent = agentList.find(
     (a) => a.state !== "PENDING" && a.state !== "APPROVED" && a.state !== "COMPLETED"
   );
-  let narration = "Waiting to start design…";
+  let narration = "Waiting to start…";
   let narrationHighlight: string | undefined;
   let narrationSub: string | undefined;
   if (isComplete) {
@@ -97,14 +104,14 @@ export function DesignPage() {
     const isCritiquing = activeAgent.state.startsWith("DESIGN_CRITIQUE");
     const roundNum = isCritiquing ? activeAgent.state.slice(-1) : null;
     if (isCritiquing) {
-      narration = `Critiquing`;
+      narration = "Critiquing";
       narrationHighlight = activeAgent.agent_name;
       narrationSub = `round ${roundNum} of 5`;
     } else if (activeAgent.state === "REVISING_SPEC" || activeAgent.state === "AUTO_FIX") {
-      narration = `Auto-fixing`;
+      narration = "Auto-fixing";
       narrationHighlight = activeAgent.agent_name;
     } else if (activeAgent.state === "SPECIFYING") {
-      narration = `Designing`;
+      narration = "Designing";
       narrationHighlight = activeAgent.agent_name;
     } else {
       narration = `${activeAgent.agent_name} — ${activeAgent.state}`;
@@ -117,48 +124,55 @@ export function DesignPage() {
     narration = phase;
   }
 
-  const progress =
-    agentList.length > 0 ? Math.round((approvedCount / agentList.length) * 100) : 0;
-
+  const progress = agentList.length > 0 ? Math.round((approvedCount / agentList.length) * 100) : 0;
   const logEntries = events.map((e) => ({
     type: e.type,
     text: summarizeEvent(e as { type: string; [k: string]: unknown }),
   }));
-
   const agentStates: Record<string, string> = {};
   agentList.forEach((a) => { agentStates[a.agent_id] = a.state; });
-
   const selectedAgent = selectedAgentId ? (agents[selectedAgentId] ?? null) : null;
 
   if (!pipelineId) return null;
 
+  const isWorking = isConnected && !isComplete;
+
   return (
-    <div className="flex flex-col h-full bg-gray-950 text-white overflow-hidden">
-      {/* Zone 1: Objective banner */}
-      <div className="shrink-0 px-4 py-2.5 border-b border-gray-800 bg-[#0d1117] flex items-center justify-between gap-4">
+    <div className="flex flex-col h-full bg-[#0a0e1a] text-white overflow-hidden">
+      <div className="shrink-0 px-5 pt-3 pb-1 flex items-center gap-3">
+        <span className="text-orange-400 text-base">🔥</span>
+        <span className="text-orange-400 font-bold font-mono tracking-widest text-sm">DESIGN TIME</span>
+        {isWorking && (
+          <span className="flex items-center text-xs text-gray-600 font-mono">
+            · AI is working<ThinkingDots />
+          </span>
+        )}
+        {isComplete && (
+          <span className="text-xs text-green-500 font-mono">· Blueprint complete</span>
+        )}
+      </div>
+
+      <div className="shrink-0 mx-4 mb-2 px-4 py-3 border border-gray-700/50 bg-[#0d1117] rounded-xl flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
-          <span className="text-cyan-500 text-xs font-mono shrink-0">O</span>
-          <span className="text-cyan-600 text-xs font-mono uppercase tracking-wider shrink-0">Objective</span>
-          <span className="text-gray-200 text-sm truncate" title={activePipeline?.objective}>
+          <span className="text-cyan-500 text-sm shrink-0">○</span>
+          <span className="text-cyan-500 text-xs font-mono font-bold uppercase tracking-wider shrink-0">Objective</span>
+          <span className="text-gray-200 text-sm truncate font-mono" title={activePipeline?.objective}>
             {activePipeline?.objective || "Loading…"}
           </span>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
-          {isComplete && (
-            <button
-              className="bg-purple-700 hover:bg-purple-600 text-white px-4 py-1.5 rounded-lg text-xs font-mono font-bold transition-colors"
-              onClick={() => navigate(`/run/${pipelineId}`)}
-            >
-              ▶ Run Pipeline
-            </button>
-          )}
-          <span className={`text-xs font-mono ${isConnected ? "text-green-400" : isComplete ? "text-green-500" : "text-yellow-600"}`}>
-            {isConnected ? "● LIVE" : isComplete ? "✓ Done" : "○ Connecting…"}
-          </span>
-        </div>
+        <button
+          className={`font-bold px-5 py-2 rounded-lg text-sm font-mono transition-all shrink-0 flex items-center gap-2 ${
+            isWorking
+              ? "bg-gray-700 text-gray-500 cursor-not-allowed"
+              : "bg-cyan-500 hover:bg-cyan-400 text-[#0a0e1a] shadow-lg shadow-cyan-500/20"
+          }`}
+          onClick={() => setDesignTrigger((t) => t + 1)}
+          disabled={isWorking}
+        >
+          ✏ {isComplete ? "Re-design" : "Design"}
+        </button>
       </div>
 
-      {/* Zone 2: Progress strip */}
       <ProgressStrip
         narration={narration}
         narrationHighlight={narrationHighlight}
@@ -170,27 +184,26 @@ export function DesignPage() {
         mode={isComplete || isConnected ? "design" : "idle"}
       />
 
-      {/* Zone 3: Status bar */}
-      <div className="shrink-0 px-4 py-1.5 border-b border-gray-800 bg-[#0d1117] flex items-center justify-between text-xs font-mono">
+      <div className="shrink-0 px-5 py-1.5 border-b border-gray-800/60 bg-[#0a0e1a] flex items-center justify-between text-xs font-mono">
         <div className="flex items-center gap-3">
-          <span className="bg-cyan-900/60 text-cyan-400 border border-cyan-800 px-2 py-0.5 rounded font-bold">
+          <span className="bg-cyan-900/50 text-cyan-400 border border-cyan-800/60 px-2 py-0.5 rounded font-bold">
             — DESIGN
           </span>
-          <span className="text-gray-500">
-            {isComplete ? "Blueprint complete" : isConnected ? "Blueprint in progress…" : "Connecting…"}
+          <span className="text-gray-600">
+            {isComplete ? "Blueprint complete" : isWorking ? "Blueprint in progress…" : "Ready to design"}
           </span>
         </div>
         <div className="flex items-center gap-3">
           {approvedCount > 0 && (
             <span className="text-green-400 font-bold">✓ {approvedCount}</span>
           )}
-          {agentList.length - approvedCount > 0 && isConnected && (
+          {agentList.length - approvedCount > 0 && isWorking && (
             <span className="text-amber-400 font-bold animate-pulse">● {agentList.length - approvedCount}</span>
           )}
           <button
-            className={`px-4 py-1.5 rounded-lg font-bold transition-colors ${
+            className={`px-4 py-1.5 rounded-lg font-bold transition-all flex items-center gap-2 ${
               isComplete
-                ? "bg-purple-700 hover:bg-purple-600 text-white"
+                ? "bg-purple-700 hover:bg-purple-600 text-white shadow-lg shadow-purple-700/20"
                 : "bg-gray-800 text-gray-600 cursor-not-allowed"
             }`}
             disabled={!isComplete}
@@ -201,27 +214,21 @@ export function DesignPage() {
         </div>
       </div>
 
-      {/* Zone 4: 3-column body */}
-      <div className="flex-1 grid grid-cols-[220px_1fr_200px] gap-0 overflow-hidden">
-        {/* Col 1: Agent list */}
-        <div className="border-r border-gray-800 p-3 overflow-hidden">
+      <div className="flex-1 grid grid-cols-[280px_1fr_240px] gap-0 overflow-hidden">
+        <div className="border-r border-gray-800/60 p-3 overflow-hidden">
           <DesignAgentList
             agents={agentList}
             selectedId={selectedAgentId}
             onSelect={setSelectedAgentId}
           />
         </div>
-
-        {/* Col 2: Critique detail */}
         <div className="p-4 overflow-hidden">
           <CritiqueDetailColumn
             agent={selectedAgent}
-            agentIndex={selectedAgentId ? agentList.findIndex(a => a.agent_id === selectedAgentId) : undefined}
+            agentIndex={selectedAgentId ? agentList.findIndex((a) => a.agent_id === selectedAgentId) : undefined}
           />
         </div>
-
-        {/* Col 3: DAG + log */}
-        <div className="border-l border-gray-800 p-3 overflow-hidden">
+        <div className="border-l border-gray-800/60 p-3 overflow-hidden">
           <DagLogColumn
             dag={dag}
             agentStates={agentStates}

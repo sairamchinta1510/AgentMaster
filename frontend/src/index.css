@@ -1,1 +1,44 @@
 @import 'tailwindcss';
+
+/* AgentMaster animations */
+@keyframes shimmer-bar {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+.animate-shimmer {
+  background: linear-gradient(90deg, #164e63 0%, #22d3ee 40%, #0891b2 60%, #164e63 100%);
+  background-size: 200% auto;
+  animation: shimmer-bar 2s linear infinite;
+}
+.animate-shimmer-purple {
+  background: linear-gradient(90deg, #3b0764 0%, #a855f7 40%, #7c3aed 60%, #3b0764 100%);
+  background-size: 200% auto;
+  animation: shimmer-bar 2s linear infinite;
+}
+@keyframes glow-amber {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,0), inset 0 0 0 rgba(245,158,11,0); }
+  50% { box-shadow: 0 0 12px 2px rgba(245,158,11,0.35), inset 0 0 20px rgba(245,158,11,0.08); }
+}
+.animate-glow-amber { animation: glow-amber 1.4s ease-in-out infinite; }
+@keyframes glow-purple {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(168,85,247,0); }
+  50% { box-shadow: 0 0 12px 2px rgba(168,85,247,0.4), inset 0 0 20px rgba(168,85,247,0.08); }
+}
+.animate-glow-purple { animation: glow-purple 1.4s ease-in-out infinite; }
+@keyframes glow-cyan {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34,211,238,0); }
+  50% { box-shadow: 0 0 12px 2px rgba(34,211,238,0.35), inset 0 0 20px rgba(34,211,238,0.08); }
+}
+.animate-glow-cyan { animation: glow-cyan 1.4s ease-in-out infinite; }
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in { animation: fade-in-up 0.25s ease-out forwards; }
+@keyframes thinking {
+  0%, 80%, 100% { opacity: 0.2; transform: scale(0.7); }
+  40% { opacity: 1; transform: scale(1); }
+}
+.thinking-dot { animation: thinking 1.4s ease-in-out infinite; }
+.thinking-dot:nth-child(2) { animation-delay: 0.2s; }
+.thinking-dot:nth-child(3) { animation-delay: 0.4s; }

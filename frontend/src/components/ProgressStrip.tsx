@@ -1,6 +1,8 @@
 // frontend/src/components/ProgressStrip.tsx
 import { useEffect, useRef } from "react";
 
+const CIRCLED = ["①","②","③","④","⑤","⑥","⑦","⑧","⑨","⑩"];
+
 export interface StepPill {
   id: string;
   label: string;
@@ -57,8 +59,11 @@ export function ProgressStrip({
   const stripBorder = mode === "design" ? "border-l-4 border-l-cyan-600 border-b border-b-cyan-900" :
                       mode === "run"    ? "border-l-4 border-l-purple-600 border-b border-b-purple-900" :
                                           "border-b border-gray-800";
-  const barColor  = mode === "design" ? "bg-gradient-to-r from-cyan-500 to-amber-500" :
-                    mode === "run"    ? "bg-purple-500" : "bg-gray-700";
+  const barClass = mode === "design"
+    ? (progress < 100 ? "animate-shimmer" : "bg-gradient-to-r from-cyan-500 to-green-500")
+    : mode === "run"
+    ? (progress < 100 ? "animate-shimmer-purple" : "bg-purple-500")
+    : "bg-gray-700";
   const dotColor  = mode === "design" ? "bg-amber-400 animate-pulse" :
                     mode === "run"    ? "bg-purple-400 animate-pulse" : "bg-gray-600";
   const countColor = mode === "design" ? "text-amber-400" : mode === "run" ? "text-purple-300" : "text-gray-600";
@@ -91,7 +96,7 @@ export function ProgressStrip({
       {/* Progress bar */}
       <div className="h-1.5 bg-gray-800 rounded-full mb-2.5">
         <div
-          className={`h-1.5 rounded-full transition-all duration-700 ${barColor}`}
+          className={`h-1.5 rounded-full transition-all duration-700 ${barClass}`}
           style={{ width: `${progress}%` }}
         />
       </div>
@@ -106,7 +111,7 @@ export function ProgressStrip({
               className={`flex items-center gap-1.5 border rounded-full px-3 py-1 text-xs whitespace-nowrap shrink-0 font-mono ${STATE_PILL[p.state]}`}
             >
               <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${STATE_DOT[p.state]}`} />
-              {i + 1}. {p.label}
+              {CIRCLED[i] ?? `${i + 1}`}. {p.label}
               {p.detail && <span className="opacity-70">{p.detail}</span>}
               {p.state === "done" && <span className="text-green-400">✓</span>}
             </div>
