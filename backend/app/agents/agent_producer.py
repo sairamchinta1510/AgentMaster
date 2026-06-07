@@ -63,7 +63,7 @@ class AgentProducerAgent:
             output_schema=data.get("output_schema", {}),
             error_schema=data.get("error_schema", {}),
             required_user_inputs=_normalize_user_inputs(data.get("required_user_inputs", [])),
-            timeout_seconds=data.get("timeout_seconds", 60),
+            timeout_seconds=data.get("timeout_seconds") or 60,
             retry_policy=data.get(
                 "retry_policy", {"max_retries": 3, "backoff": "exponential"}
             ),
