@@ -55,7 +55,7 @@ export function DesignPage() {
   const { activePipeline, setActivePipeline, upsertSummary } = usePipelineStore();
   const { isConnected, events, agents, dag, isComplete, phase, phaseMessage, llmTokens } = useDesignStore();
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
-  const [designTrigger, setDesignTrigger] = useState(0);
+  const [designTrigger, setDesignTrigger] = useState(-1); // -1 = don't auto-start WS
 
   // Save modal
   const [showSave, setShowSave] = useState(false);
@@ -98,6 +98,45 @@ export function DesignPage() {
             : 0,
           created_at: r.data.created_at,
         });
+
+        // Hydrate design store from saved blueprint — no need to re-run LLM
+        const blueprint = r.data.blueprint as {
+          agents?: Array<{ agent_id: string; agent_name: string; description?: string; [k: string]: unknown }>;
+          edges?: Array<{ from: string; to: string; payload_description?: string }>;
+        } | null;
+        if (blueprint?.agents?.length) {
+          const store = useDesignStore.getState();
+          store.reset();
+          blueprint.agents.forEach((spec) => {
+            store.upsertAgent({
+              agent_id: spec.agent_id,
+              agent_name: spec.agent_name,
+              phase: "design_time",
+              state: "APPROVED" as const,
+              description: (spec.description as string) ?? "",
+              input_schema: (spec.input_schema as Record<string, unknown>) ?? {},
+              output_schema: (spec.output_schema as Record<string, unknown>) ?? {},
+              critique_iterations: 0,
+              quality_score: null,
+              critique_history: [],
+            });
+          });
+          // Build DAG from blueprint edges
+          const nodes = blueprint.agents.map((a) => ({
+            node_id: `node_${a.agent_id}`,
+            agent_id: a.agent_id,
+            agent_name: a.agent_name,
+            depends_on: (a.depends_on as string[]) ?? [],
+          }));
+          const edges = (blueprint.edges ?? []).map((e) => ({
+            edge_id: `e_node_${e.from}_node_${e.to}`,
+            from_node: `node_${e.from}`,
+            to_node: `node_${e.to}`,
+          }));
+          store.setDAG({ nodes, edges });
+          store.setComplete(true);
+          store.setPhaseMessage(`Loaded — ${blueprint.agents.length} agents ready`);
+        }
       })
       .catch(() => {});
   }, [pipelineId, setActivePipeline, upsertSummary]);
@@ -160,7 +199,7 @@ export function DesignPage() {
       objective: activePipeline.objective + addendum,
     }).then(() => {
       setActivePipeline({ ...activePipeline, objective: activePipeline.objective + addendum });
-      setDesignTrigger((t) => t + 1);
+      setDesignTrigger((t) => t < 0 ? 0 : t + 1);
     }).catch(() => {});
   };
 
@@ -274,7 +313,7 @@ export function DesignPage() {
               ? "bg-gray-700 text-gray-500 cursor-not-allowed"
               : "bg-cyan-500 hover:bg-cyan-400 text-[#0a0e1a] shadow-lg shadow-cyan-500/20"
           }`}
-          onClick={() => setDesignTrigger((t) => t + 1)}
+          onClick={() => setDesignTrigger((t) => t < 0 ? 0 : t + 1)}
           disabled={isWorking}
         >
           ✏ {isComplete ? "Re-design" : "Design"}

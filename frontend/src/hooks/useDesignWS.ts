@@ -3,7 +3,7 @@ import { wsUrl } from "../api/client";
 import { useDesignStore } from "../store/runStore";
 import type { DesignWSEvent, AtomicAgent } from "../types";
 
-export function useDesignWS(pipelineId: string | null, trigger: number = 0) {
+export function useDesignWS(pipelineId: string | null, trigger: number = -1) {
   const wsRef = useRef<WebSocket | null>(null);
 
   const stop = useCallback(() => {
@@ -11,7 +11,7 @@ export function useDesignWS(pipelineId: string | null, trigger: number = 0) {
   }, []);
 
   useEffect(() => {
-    if (!pipelineId) return;
+    if (!pipelineId || trigger < 0) return;  // trigger=-1 means "don't auto-design"
     const s = useDesignStore.getState();
     s.reset();
 
