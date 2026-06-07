@@ -58,7 +58,7 @@ Code rules:
 - List only secret/credential keys in credential_keys (informational only, all inputs are already injected)
 - Print the result as a single JSON object to stdout (last print statement)
 - Handle errors: print details to stderr, keep running
-- Write files only to /tmp if needed
+- Write files only to /tmp if needed — always use unique paths: use tempfile.mkdtemp() or /tmp/<uuid4> — NEVER hardcode /tmp/repo or any fixed path that could collide across runs
 - NEVER run: rm -rf, kill, shutdown, or any destructive shell command
 - Use only pre-installed packages: httpx, requests, boto3, google-cloud-logging,
   google-cloud-monitoring, PyGithub, kubernetes, subprocess, glob, pathlib, json, os, sys, datetime
