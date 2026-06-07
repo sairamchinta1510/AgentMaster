@@ -115,32 +115,3 @@ def _orm_to_summary(row: PipelineORM) -> PipelineSummary:
         agent_count=agent_count,
         created_at=str(row.created_at) if row.created_at else None,
     )
-
-        raise HTTPException(status_code=404, detail="Pipeline not found")
-    db.delete(row)
-    db.commit()
-    backup_to_gcs()
-
-
-def _orm_to_pipeline(row: PipelineORM) -> Pipeline:
-    return Pipeline(
-        id=row.id,
-        objective=row.objective,
-        name=row.name,
-        input_schema=row.input_schema or [],
-        blueprint=row.blueprint or {},
-        created_at=str(row.created_at) if row.created_at else None,
-        updated_at=str(row.updated_at) if row.updated_at else None,
-    )
-
-
-def _orm_to_summary(row: PipelineORM) -> PipelineSummary:
-    blueprint = row.blueprint or {}
-    agent_count = len(blueprint.get("agents", []))
-    return PipelineSummary(
-        id=row.id,
-        objective=row.objective,
-        name=row.name,
-        agent_count=agent_count,
-        created_at=str(row.created_at) if row.created_at else None,
-    )
