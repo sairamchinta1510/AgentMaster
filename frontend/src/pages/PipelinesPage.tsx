@@ -30,11 +30,16 @@ export function PipelinesPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [objective, setObjective] = useState("");
   const [creating, setCreating] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
+    setLoading(true);
+    setFetchError(null);
     listPipelines()
       .then((r) => setPipelines(r.data))
-      .catch(() => {});
+      .catch(() => setFetchError("Could not load pipelines. Check your connection and refresh."))
+      .finally(() => setLoading(false));
   }, [setPipelines]);
 
   const handleCreate = async () => {
@@ -120,7 +125,19 @@ export function PipelinesPage() {
           </div>
         )}
 
-        {pipelines.length === 0 && !showCreate && (
+        {loading && (
+          <div className="text-center py-16 text-gray-600">
+            <div className="text-sm font-mono animate-pulse">Loading pipelines…</div>
+          </div>
+        )}
+
+        {!loading && fetchError && (
+          <div className="bg-red-950/40 border border-red-800/50 rounded-xl p-4 text-red-400 text-sm font-mono">
+            ⚠ {fetchError}
+          </div>
+        )}
+
+        {!loading && !fetchError && pipelines.length === 0 && !showCreate && (
           <div className="text-center py-16 text-gray-600">
             <div className="text-4xl mb-3">⬡</div>
             <div className="text-sm font-mono">No pipelines yet.</div>
@@ -133,51 +150,53 @@ export function PipelinesPage() {
           </div>
         )}
 
-        <div className="space-y-2">
-          {pipelines.map((p: PipelineSummary) => (
-            <div
-              key={p.id}
-              className="group bg-[#0d1117] border border-gray-800 hover:border-gray-700 rounded-xl px-5 py-4 cursor-pointer transition-all"
-              onClick={() => navigate(`/design/${p.id}`)}
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-3 mb-1 flex-wrap">
-                    <span className="text-white font-bold font-mono text-sm">{p.name}</span>
-                    <StatusBadge agentCount={p.agent_count} />
-                  </div>
-                  <div className="text-gray-500 text-xs font-mono truncate">{p.objective}</div>
-                  {p.created_at && (
-                    <div className="text-gray-700 text-xs mt-1">
-                      {new Date(p.created_at).toLocaleDateString()}
+        {!loading && !fetchError && (
+          <div className="space-y-2">
+            {pipelines.map((p: PipelineSummary) => (
+              <div
+                key={p.id}
+                className="group bg-[#0d1117] border border-gray-800 hover:border-gray-700 rounded-xl px-5 py-4 cursor-pointer transition-all"
+                onClick={() => navigate(`/design/${p.id}`)}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-3 mb-1 flex-wrap">
+                      <span className="text-white font-bold font-mono text-sm">{p.name}</span>
+                      <StatusBadge agentCount={p.agent_count} />
                     </div>
-                  )}
-                </div>
-                <div className="flex gap-2 shrink-0 items-center">
-                  <button
-                    className="opacity-0 group-hover:opacity-100 bg-[#161b22] hover:bg-cyan-900/40 border border-gray-700 hover:border-cyan-700 text-gray-400 hover:text-cyan-300 text-xs font-bold px-3 py-1.5 rounded-lg font-mono transition-all"
-                    onClick={(e) => { e.stopPropagation(); navigate(`/design/${p.id}`); }}
-                  >
-                    ✏ Design
-                  </button>
-                  <button
-                    className="opacity-0 group-hover:opacity-100 bg-[#161b22] hover:bg-green-900/40 border border-gray-700 hover:border-green-700 text-gray-400 hover:text-green-300 text-xs font-bold px-3 py-1.5 rounded-lg font-mono transition-all"
-                    onClick={(e) => { e.stopPropagation(); navigate(`/run/${p.id}`); }}
-                  >
-                    ▶ Run
-                  </button>
-                  <button
-                    className="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-red-400 text-xs px-2 py-1.5 rounded-lg transition-all"
-                    onClick={(e) => handleDelete(e, p.id)}
-                    title="Delete"
-                  >
-                    ✕
-                  </button>
+                    <div className="text-gray-500 text-xs font-mono truncate">{p.objective}</div>
+                    {p.created_at && (
+                      <div className="text-gray-700 text-xs mt-1">
+                        {new Date(p.created_at).toLocaleDateString()}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex gap-2 shrink-0 items-center">
+                    <button
+                      className="opacity-0 group-hover:opacity-100 bg-[#161b22] hover:bg-cyan-900/40 border border-gray-700 hover:border-cyan-700 text-gray-400 hover:text-cyan-300 text-xs font-bold px-3 py-1.5 rounded-lg font-mono transition-all"
+                      onClick={(e) => { e.stopPropagation(); navigate(`/design/${p.id}`); }}
+                    >
+                      ✏ Design
+                    </button>
+                    <button
+                      className="opacity-0 group-hover:opacity-100 bg-[#161b22] hover:bg-green-900/40 border border-gray-700 hover:border-green-700 text-gray-400 hover:text-green-300 text-xs font-bold px-3 py-1.5 rounded-lg font-mono transition-all"
+                      onClick={(e) => { e.stopPropagation(); navigate(`/run/${p.id}`); }}
+                    >
+                      ▶ Run
+                    </button>
+                    <button
+                      className="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-red-400 text-xs px-2 py-1.5 rounded-lg transition-all"
+                      onClick={(e) => handleDelete(e, p.id)}
+                      title="Delete"
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
