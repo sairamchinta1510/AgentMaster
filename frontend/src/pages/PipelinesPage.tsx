@@ -224,11 +224,11 @@ export function PipelinesPage() {
                       🔑
                     </button>
                     <button
-                      className="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-red-400 text-xs px-2 py-1.5 rounded-lg transition-all"
+                      className="bg-red-950/60 hover:bg-red-900/70 border border-red-800/60 hover:border-red-600 text-red-400 hover:text-red-300 text-xs font-bold px-3 py-1.5 rounded-lg font-mono transition-all shrink-0"
                       onClick={(e) => handleDelete(e, p.id)}
-                      title="Delete"
+                      title="Delete pipeline"
                     >
-                      ✕
+                      🗑
                     </button>
                   </div>
                 </div>
