@@ -142,3 +142,53 @@ async def test_fails_after_max_retries_exhausted():
 
     assert result.status == "failed"
     assert result.error is not None
+
+
+@pytest.mark.asyncio
+async def test_retries_when_output_contains_vague_non_answer():
+    """If synth output contains 'not available'/'unknown', agent re-executes with file-read instruction."""
+    executor = AgentExecutorAgent()
+
+    plan_vague = MagicMock()
+    plan_vague.choices[0].message.content = (
+        '{"action": "NO_CODE_NEEDED", "output": {"log_storage": "not directly available"}}'
+    )
+    plan_real = MagicMock()
+    plan_real.choices[0].message.content = (
+        '{"action": "EXECUTE_CODE", "code": "import os,json; p=os.environ[\'REPOSITORY_PATH\']; print(json.dumps({\'log_storage\': \'file\'}))", "credential_keys": []}'
+    )
+    synth = MagicMock()
+    synth.choices[0].message.content = '{"log_storage": "file"}'
+
+    responses = [plan_vague, plan_real, synth]
+    call_count = 0
+
+    async def mock_create(**kwargs):
+        nonlocal call_count
+        r = responses[call_count]
+        call_count += 1
+        return r
+
+    with patch.object(executor.client.chat.completions, "create", new=mock_create), \
+         patch("app.agents.agent_executor.execute_python_code", new=AsyncMock(return_value=('{"log_storage": "file"}\n', "", 0))):
+        result = await executor.execute(AGENT_SPEC, {"repository_path": "/tmp/tmpabc123"})
+
+    assert result.status == "completed"
+    assert result.output.get("log_storage") != "not directly available"
+
+
+@pytest.mark.asyncio
+async def test_no_code_needed_with_genuine_answer_does_not_retry():
+    """A NO_CODE_NEEDED response with real content should not trigger retry."""
+    executor = AgentExecutorAgent()
+
+    plan_response = MagicMock()
+    plan_response.choices[0].message.content = (
+        '{"action": "NO_CODE_NEEDED", "output": {"result": "The answer is 42"}}'
+    )
+
+    with patch.object(executor.client.chat.completions, "create", new=AsyncMock(return_value=plan_response)):
+        result = await executor.execute(AGENT_SPEC, {})
+
+    assert result.status == "completed"
+    assert result.output["result"] == "The answer is 42"

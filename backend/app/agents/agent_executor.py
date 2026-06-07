@@ -45,13 +45,16 @@ You will receive:
 
 Decide which action to take:
 
-OPTION A — Pure reasoning (no real-world data needed, inputs contain everything):
+OPTION A — Pure reasoning ONLY when ALL output values can be derived directly from the inputs with certainty:
 Return ONLY this JSON:
 {"action": "NO_CODE_NEEDED", "output": {<json matching output_schema>}}
 
-OPTION B — Real-world execution required (API calls, data fetching, system queries, infrastructure changes):
+OPTION B — Required whenever the task involves reading files, scanning directories, calling APIs, or any real-world data access:
 Return ONLY this JSON:
 {"action": "EXECUTE_CODE", "code": "<python code string>", "credential_keys": ["KEY1"]}
+
+IMPORTANT: If any input contains a file path (repository_path, file_path, log_path, etc.) you MUST use
+EXECUTE_CODE to read and analyse the actual files — NEVER use NO_CODE_NEEDED for file-based tasks.
 
 Code rules:
 - ALL input values (paths, URLs, names, credentials) are injected as environment variables.
@@ -72,11 +75,45 @@ matching the output_schema exactly. Use the real data from stdout — do not fab
 Return ONLY a valid JSON object matching the schema.
 """
 
+# Sentinel phrases that indicate the LLM gave a vague non-answer instead of real data
+_VAGUE_OUTPUT_PHRASES = [
+    "not directly available",
+    "not available",
+    "beyond the scope",
+    "requires deeper analysis",
+    "cannot be determined",
+    "would need to",
+    "further analysis",
+    "unknown",
+]
+
+# Input key suffixes that indicate a file/directory path — must trigger EXECUTE_CODE
+_PATH_INPUT_KEYS = {"path", "dir", "directory", "file", "repo", "repository"}
+
+
+def _is_vague_output(output: dict) -> bool:
+    """Return True if any string output value contains a sentinel non-answer phrase."""
+    for v in output.values():
+        if isinstance(v, str):
+            lower = v.lower()
+            if any(phrase in lower for phrase in _VAGUE_OUTPUT_PHRASES):
+                return True
+    return False
+
+
+def _has_path_inputs(context_inputs: dict) -> bool:
+    """Return True if any input key looks like a file/directory path."""
+    for key in context_inputs:
+        key_lower = key.lower()
+        if any(suffix in key_lower for suffix in _PATH_INPUT_KEYS):
+            return True
+    return False
+
 
 # Callback type: called when executor enters a new code phase
 CodeEventCallback = Callable[[str, str, str | None], Awaitable[None]]
 # Args: (agent_id, phase, code_preview)
-# phase: "planning" | "executing" | "synthesising" | "fallback"
+# phase: "planning" | "reviewing" | "executing" | "synthesising" | "fallback"
 
 
 class AgentExecutorAgent:
@@ -133,14 +170,49 @@ class AgentExecutorAgent:
             if plan.get("action") == "NO_CODE_NEEDED":
                 await emit("fallback")
                 output = plan.get("output", {})
-                duration_ms = int(time.time() * 1000) - start_ms
-                return AgentResult(
-                    agent_id=agent_id,
-                    agent_name=agent_name,
-                    status="completed",
-                    output=output,
-                    duration_ms=duration_ms,
-                )
+
+                # Output quality critique: if the LLM gave a vague non-answer
+                # (especially for file-based tasks), force a code execution retry
+                if _is_vague_output(output) or _has_path_inputs(context_inputs):
+                    logger.warning(
+                        "[%s] NO_CODE_NEEDED produced vague/incomplete output or "
+                        "has path inputs — forcing EXECUTE_CODE retry",
+                        agent_id,
+                    )
+                    retry_prompt = (
+                        plan_prompt
+                        + "\n\nCRITIQUE: The previous NO_CODE_NEEDED response was insufficient. "
+                        + "You MUST use EXECUTE_CODE to read and analyse the actual files/data. "
+                        + "Do NOT attempt to answer from reasoning alone when file paths are provided."
+                    )
+                    retry_response = await self.client.chat.completions.create(
+                        model=self.model,
+                        messages=[
+                            {"role": "system", "content": PLAN_SYSTEM_PROMPT},
+                            {"role": "user", "content": retry_prompt},
+                        ],
+                        response_format={"type": "json_object"},
+                        temperature=0.2,
+                    )
+                    plan = _parse_llm_json(retry_response.choices[0].message.content)
+                    if plan.get("action") == "NO_CODE_NEEDED":
+                        # LLM still refused to run code — accept output as-is
+                        output = plan.get("output", output)
+                        duration_ms = int(time.time() * 1000) - start_ms
+                        return AgentResult(
+                            agent_id=agent_id, agent_name=agent_name,
+                            status="completed", output=output, duration_ms=duration_ms,
+                        )
+                    # Fall through to EXEC path with new plan
+                else:
+                    duration_ms = int(time.time() * 1000) - start_ms
+                    return AgentResult(
+                        agent_id=agent_id,
+                        agent_name=agent_name,
+                        status="completed",
+                        output=output,
+                        duration_ms=duration_ms,
+                    )
 
             # ── EXEC phase ───────────────────────────────────────────────────
             code = plan.get("code", "")
