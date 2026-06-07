@@ -44,7 +44,7 @@ class CritiqueIssue(BaseModel):
     description: str
     impact: str
     recommendation: str
-    effort_estimate: str  # low | medium | high
+    effort_estimate: str = "medium"  # low | medium | high
     auto_fixable: bool = False
 
 
