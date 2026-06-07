@@ -8,6 +8,7 @@ from typing import Any
 from openai import AsyncOpenAI
 
 from app.agents.code_executor import execute_python_code
+from app.agents.code_reviewer import review_and_fix_code
 from app.config import settings
 from app.models.run import AgentResult
 
@@ -155,6 +156,14 @@ class AgentExecutorAgent:
                 for k, v in context_inputs.items()
                 if not k.startswith("_") and v is not None
             }
+
+            # ── REVIEW phase ─────────────────────────────────────────────────
+            await emit("reviewing", code_preview)
+            code, review_changes = await review_and_fix_code(
+                code, env_vars, self.client, self.model
+            )
+            if review_changes:
+                logger.info("Code reviewer fixed %d issue(s) in %s", len(review_changes), agent_id)
 
             stdout, stderr, returncode = await execute_python_code(code, env_vars)
 
