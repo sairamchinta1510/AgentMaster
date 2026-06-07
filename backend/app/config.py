@@ -6,7 +6,7 @@ class Settings(BaseSettings):
 
     # Gemini (preferred)
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.0-flash"
+    gemini_model: str = "gemini-2.5-flash"
 
     # OpenAI (fallback)
     openai_api_key: str = ""
