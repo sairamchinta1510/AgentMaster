@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { createPipeline, listPipelines, deletePipeline } from "../api/client";
 import { usePipelineStore } from "../store/pipelineStore";
-import type { PipelineSummary } from "../types";
+import type { PipelineSummary, TriggerConfig } from "../types";
+import { CredentialsPanel } from "../components/CredentialsPanel";
 
 function StatusBadge({ agentCount }: { agentCount: number }) {
   if (agentCount > 0) {
@@ -15,6 +16,22 @@ function StatusBadge({ agentCount }: { agentCount: number }) {
   return (
     <span className="text-xs px-2 py-0.5 rounded-full bg-gray-800 border border-gray-700 text-gray-500 font-mono">
       Not yet designed
+    </span>
+  );
+}
+
+function TriggerBadge({ trigger }: { trigger: TriggerConfig | null | undefined }) {
+  if (!trigger || trigger.mode === "manual") return null;
+  if (trigger.mode === "scheduled") {
+    return (
+      <span className="text-xs px-2 py-0.5 rounded-full bg-purple-900/50 border border-purple-700/50 text-purple-300 font-mono">
+        ⏱ Every {trigger.interval_minutes}m
+      </span>
+    );
+  }
+  return (
+    <span className="text-xs px-2 py-0.5 rounded-full bg-orange-900/50 border border-orange-700/50 text-orange-300 font-mono">
+      📡 Webhook
     </span>
   );
 }
@@ -32,6 +49,13 @@ export function PipelinesPage() {
   const [creating, setCreating] = useState(false);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [credentialsPipelineId, setCredentialsPipelineId] = useState<string | null>(null);
+
+  const handleCopyWebhook = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    const url = `${window.location.origin}/api/webhooks/${id}`;
+    navigator.clipboard.writeText(url).then(() => alert("Webhook URL copied!"));
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -163,6 +187,7 @@ export function PipelinesPage() {
                     <div className="flex items-center gap-3 mb-1 flex-wrap">
                       <span className="text-white font-bold font-mono text-sm">{p.name}</span>
                       <StatusBadge agentCount={p.agent_count} />
+                      <TriggerBadge trigger={p.trigger_config} />
                     </div>
                     <div className="text-gray-500 text-xs font-mono truncate">{p.objective}</div>
                     {p.created_at && (
@@ -185,6 +210,20 @@ export function PipelinesPage() {
                       ▶ Run
                     </button>
                     <button
+                      className="opacity-0 group-hover:opacity-100 bg-[#161b22] hover:bg-orange-900/40 border border-gray-700 hover:border-orange-700 text-gray-400 hover:text-orange-300 text-xs font-bold px-3 py-1.5 rounded-lg font-mono transition-all"
+                      onClick={(e) => handleCopyWebhook(e, p.id)}
+                      title="Copy webhook URL"
+                    >
+                      📡
+                    </button>
+                    <button
+                      className="opacity-0 group-hover:opacity-100 bg-[#161b22] hover:bg-gray-700 border border-gray-700 text-gray-400 hover:text-white text-xs font-bold px-3 py-1.5 rounded-lg font-mono transition-all"
+                      onClick={(e) => { e.stopPropagation(); setCredentialsPipelineId(p.id); }}
+                      title="Manage credentials"
+                    >
+                      🔑
+                    </button>
+                    <button
                       className="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-red-400 text-xs px-2 py-1.5 rounded-lg transition-all"
                       onClick={(e) => handleDelete(e, p.id)}
                       title="Delete"
@@ -196,6 +235,12 @@ export function PipelinesPage() {
               </div>
             ))}
           </div>
+        )}
+        {credentialsPipelineId && (
+          <CredentialsPanel
+            pipelineId={credentialsPipelineId}
+            onClose={() => setCredentialsPipelineId(null)}
+          />
         )}
       </div>
     </div>

@@ -1,4 +1,7 @@
 // frontend/src/components/AgentListColumn.tsx
+import { useState } from "react";
+import { useRunStore } from "../store/runStore";
+import type { CodeStatus } from "../store/runStore";
 import type { AtomicAgent, AgentResult } from "../types";
 
 const CIRCLED = ["①","②","③","④","⑤","⑥","⑦","⑧","⑨","⑩","⑪","⑫","⑬","⑭","⑮","⑯","⑰","⑱","⑲","⑳"];
@@ -119,6 +122,55 @@ export function DesignAgentList({ agents, selectedId, onSelect }: DesignAgentLis
 
 // ── Run time ────────────────────────────────────────────────────────────────
 
+function phaseLabel(phase: CodeStatus["phase"]): string {
+  if (phase === "planning") return "⚙️ Writing code…";
+  if (phase === "executing") return "⚡ Executing…";
+  if (phase === "synthesising") return "🔁 Synthesising…";
+  return "💭 Reasoning…";
+}
+
+function CodePhaseIndicator({ agentId }: { agentId: string }) {
+  const codeStatus = useRunStore((s) => s.codeStatus[agentId]);
+  if (!codeStatus) return null;
+  return (
+    <div className="text-xs text-amber-400 font-mono mt-1 animate-pulse">
+      {phaseLabel(codeStatus.phase)}
+      {codeStatus.elapsed_ms > 0 && (
+        <span className="text-gray-600 ml-2">{(codeStatus.elapsed_ms / 1000).toFixed(1)}s</span>
+      )}
+    </div>
+  );
+}
+
+function CodePreviewExpander({ output }: { output: Record<string, unknown> }) {
+  const [open, setOpen] = useState(false);
+  const code = output["_code"] as string | undefined;
+  const stdout = output["_stdout_preview"] as string | undefined;
+  if (!code) return null;
+  return (
+    <div className="mt-1.5">
+      <button
+        className="text-xs text-gray-600 hover:text-cyan-400 font-mono underline"
+        onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
+      >
+        {open ? "▲ hide code" : "▼ show code"}
+      </button>
+      {open && (
+        <div className="mt-1 space-y-1">
+          <pre className="text-xs bg-[#0d1117] border border-gray-800 rounded p-2 text-cyan-300 overflow-x-auto font-mono max-h-40">
+            {code}
+          </pre>
+          {stdout && (
+            <pre className="text-xs bg-[#0d1117] border border-gray-800 rounded p-2 text-green-300 overflow-x-auto font-mono max-h-24">
+              {stdout}
+            </pre>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface RunAgentSpec { agent_id: string; agent_name: string; description?: string; }
 
 interface RunAgentListProps {
@@ -169,11 +221,13 @@ export function RunAgentList({ agents, results, runningId, selectedId, onSelect 
                   <span className="text-gray-600">waiting</span>
                 )}
               </div>
+              {isRunning && <CodePhaseIndicator agentId={a.agent_id} />}
               {result?.status === "completed" && result.output && outputPreview(result.output) && (
                 <div className="text-xs text-gray-600 mt-0.5 truncate font-mono">
                   📄 {outputPreview(result.output)}
                 </div>
               )}
+              {result?.status === "completed" && result.output && <CodePreviewExpander output={result.output} />}
             </button>
           );
         })}
