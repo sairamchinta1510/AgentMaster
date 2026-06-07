@@ -1,8 +1,62 @@
 import json
 import logging
+import re
 from openai import AsyncOpenAI
 
 logger = logging.getLogger(__name__)
+
+
+def _repair_json_escapes(text: str) -> str:
+    r"""Fix invalid backslash escapes in LLM-generated JSON.
+
+    LLMs sometimes emit bare backslashes (e.g. regex \w, Windows paths C:\Users)
+    inside JSON strings. These are invalid per the JSON spec and cause
+    json.loads to raise JSONDecodeError: Invalid \escape.
+
+    Uses a state-machine scanner so already-valid escape sequences (e.g. \\, \n,
+    \uXXXX) are never double-escaped.
+    """
+    HEX = frozenset('0123456789abcdefABCDEF')
+    VALID_SINGLE = frozenset('"\\' + '/bfnrt')
+
+    result = []
+    i = 0
+    in_string = False
+
+    while i < len(text):
+        c = text[i]
+
+        if not in_string:
+            result.append(c)
+            if c == '"':
+                in_string = True
+            i += 1
+            continue
+
+        if c == '\\':
+            nxt = text[i + 1] if i + 1 < len(text) else ''
+            if nxt in VALID_SINGLE:
+                # e.g. \\ \" \n \t — keep as-is
+                result.append(c)
+                result.append(nxt)
+                i += 2
+            elif nxt == 'u' and i + 5 < len(text) and all(ch in HEX for ch in text[i + 2:i + 6]):
+                # Valid \uXXXX unicode escape — keep as-is
+                result.append(text[i:i + 6])
+                i += 6
+            else:
+                # Invalid escape — double the backslash to make it valid JSON
+                result.append('\\\\')
+                i += 1
+        elif c == '"':
+            in_string = False
+            result.append(c)
+            i += 1
+        else:
+            result.append(c)
+            i += 1
+
+    return ''.join(result)
 
 
 async def stream_llm_json(
@@ -43,7 +97,12 @@ async def stream_llm_json(
         raise ValueError(f"LLM returned empty response for context: {context}")
 
     try:
-        return full
-    except Exception:
-        logger.error("LLM response for '%s' was not valid JSON (length=%d): %s…", context, len(full), full[:200])
+        repaired = _repair_json_escapes(full)
+        json.loads(repaired)  # validate before returning
+        return repaired
+    except json.JSONDecodeError as exc:
+        logger.error(
+            "LLM response for '%s' was not valid JSON (length=%d) at %s: %s…",
+            context, len(full), exc, full[:200],
+        )
         raise
