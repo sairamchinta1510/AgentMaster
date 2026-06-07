@@ -84,7 +84,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 {"agent_id": agent.agent_id, "spec": agent.model_dump(exclude={"critique_history"})},
             )
 
-            final_critique, final_agent, iterations = await run_critique_loop(
+            final_critique, result_agents, iterations = await run_critique_loop(
                 agent, critique, producer, "design_time"
             )
             await send(
@@ -97,15 +97,15 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                     "critique": final_critique.model_dump(),
                 },
             )
-
-            state = (
-                AgentState.APPROVED
-                if final_critique.errors_remaining == 0
-                else AgentState.USER_ESCALATED
-            )
-            if state == AgentState.APPROVED:
-                approved_count += 1
-            await send("AGENT_STATE_CHANGE", {"agent_id": agent.agent_id, "state": state})
+            for final_agent in result_agents:
+                state = (
+                    AgentState.APPROVED
+                    if final_critique.errors_remaining == 0
+                    else AgentState.USER_ESCALATED
+                )
+                if state == AgentState.APPROVED:
+                    approved_count += 1
+                await send("AGENT_STATE_CHANGE", {"agent_id": final_agent.agent_id, "state": state})
 
         # Save approved flow to Agent Library
         lib_id = _library.save_flow(

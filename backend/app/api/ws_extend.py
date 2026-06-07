@@ -90,7 +90,7 @@ async def ws_extend_handler(websocket: WebSocket, pipeline_id: str):
                 "message": f"[{i}/{n_new}] {agent_name} specified — starting critique…",
             })
 
-            final_critique, final_agent, iterations = await run_critique_loop(
+            final_critique, result_agents, iterations = await run_critique_loop(
                 agent, critique_agent, producer, "design_time", on_event=send
             )
 
@@ -102,10 +102,10 @@ async def ws_extend_handler(websocket: WebSocket, pipeline_id: str):
                 "critique": final_critique.model_dump(),
             })
 
-            state = AgentState.APPROVED if final_critique.errors_remaining == 0 else AgentState.USER_ESCALATED
-            await send("AGENT_STATE_CHANGE", {"agent_id": final_agent.agent_id, "state": state})
-
-            approved_new.append(final_agent.model_dump(exclude={"critique_history"}))
+            for final_agent in result_agents:
+                state = AgentState.APPROVED if final_critique.errors_remaining == 0 else AgentState.USER_ESCALATED
+                await send("AGENT_STATE_CHANGE", {"agent_id": final_agent.agent_id, "state": state})
+                approved_new.append(final_agent.model_dump(exclude={"critique_history"}))
 
         # Merge into existing blueprint
         existing_blueprint = pipeline.blueprint or {}
