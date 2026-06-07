@@ -53,13 +53,15 @@ Return ONLY this JSON:
 {"action": "EXECUTE_CODE", "code": "<python code string>", "credential_keys": ["KEY1"]}
 
 Code rules:
-- Read credentials ONLY via os.environ["KEY_NAME"] — never hardcode values
+- ALL input values (paths, URLs, names, credentials) are injected as environment variables.
+  The env var name is the input field name uppercased, e.g. repository_path -> os.environ["REPOSITORY_PATH"]
+- List only secret/credential keys in credential_keys (informational only, all inputs are already injected)
 - Print the result as a single JSON object to stdout (last print statement)
 - Handle errors: print details to stderr, keep running
 - Write files only to /tmp if needed
 - NEVER run: rm -rf, kill, shutdown, or any destructive shell command
 - Use only pre-installed packages: httpx, requests, boto3, google-cloud-logging,
-  google-cloud-monitoring, PyGithub, kubernetes, json, os, sys, datetime
+  google-cloud-monitoring, PyGithub, kubernetes, subprocess, glob, pathlib, json, os, sys, datetime
 """
 
 SYNTH_SYSTEM_PROMPT = """You are synthesising the result of a real code execution into a structured output.
@@ -145,11 +147,14 @@ class AgentExecutorAgent:
             code_preview = code[:200] if code else None
             await emit("executing", code_preview)
 
-            # Extract credential values from context_inputs
-            env_vars: dict[str, str] = {}
-            for key in credential_keys:
-                if key in context_inputs:
-                    env_vars[key] = str(context_inputs[key])
+            # Inject ALL context inputs as uppercased env vars so generated code
+            # can read any input (paths, URLs, names, credentials) via os.environ.
+            # e.g. context_inputs["repository_path"] -> os.environ["REPOSITORY_PATH"]
+            env_vars: dict[str, str] = {
+                k.upper(): str(v)
+                for k, v in context_inputs.items()
+                if not k.startswith("_") and v is not None
+            }
 
             stdout, stderr, returncode = await execute_python_code(code, env_vars)
 
