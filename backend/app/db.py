@@ -17,3 +17,8 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+# Import ORM models here so Base.metadata registers all tables
+from app.models import pipeline as _pipeline_models  # noqa: E402, F401
+from app.models import run as _run_models  # noqa: E402, F401
