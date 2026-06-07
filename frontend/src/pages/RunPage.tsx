@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
 import { useRunStore } from "../store/runStore";
 import { usePipelineStore } from "../store/pipelineStore";
 import { useRunWS } from "../hooks/useRunWS";
@@ -226,8 +227,8 @@ export function RunPage() {
           </div>
         </div>
       ) : (
-        <div className="flex-1 grid grid-cols-[280px_1fr_240px] gap-0 overflow-hidden">
-          <div className="border-r border-gray-800/60 p-3 overflow-hidden">
+        <PanelGroup direction="horizontal" className="flex-1 overflow-hidden">
+          <Panel defaultSize={22} minSize={14} className="border-r border-gray-800/60 p-3 overflow-hidden">
             <RunAgentList
               agents={agentList}
               results={activeResults}
@@ -235,8 +236,9 @@ export function RunPage() {
               selectedId={selectedAgentId}
               onSelect={setSelectedAgentId}
             />
-          </div>
-          <div className="p-4 overflow-hidden">
+          </Panel>
+          <PanelResizeHandle className="w-1.5 bg-gray-800/60 hover:bg-purple-700/60 active:bg-purple-500/60 transition-colors cursor-col-resize" />
+          <Panel defaultSize={56} minSize={30} className="p-4 overflow-hidden">
             <RunDetailColumn
               agentId={selectedAgentId}
               agentName={selectedSpec?.agent_name}
@@ -252,8 +254,9 @@ export function RunPage() {
               starting={starting}
               hasBlueprint={hasBlueprint}
             />
-          </div>
-          <div className="border-l border-gray-800/60 p-3 overflow-hidden">
+          </Panel>
+          <PanelResizeHandle className="w-1.5 bg-gray-800/60 hover:bg-purple-700/60 active:bg-purple-500/60 transition-colors cursor-col-resize" />
+          <Panel defaultSize={22} minSize={14} className="border-l border-gray-800/60 p-3 overflow-hidden">
             <DagLogColumn
               dag={blueprintDag}
               agentStates={agentStates}
@@ -261,8 +264,8 @@ export function RunPage() {
               inputFields={inputSchema}
               mode="run"
             />
-          </div>
-        </div>
+          </Panel>
+        </PanelGroup>
       )}
     </div>
   );

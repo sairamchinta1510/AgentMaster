@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
 import { useDesignStore } from "../store/runStore";
 import { usePipelineStore } from "../store/pipelineStore";
 import { useDesignWS } from "../hooks/useDesignWS";
@@ -228,21 +229,23 @@ export function DesignPage() {
         </div>
       </div>
 
-      <div className="flex-1 grid grid-cols-[280px_1fr_240px] gap-0 overflow-hidden">
-        <div className="border-r border-gray-800/60 p-3 overflow-hidden">
+      <PanelGroup direction="horizontal" className="flex-1 overflow-hidden">
+        <Panel defaultSize={22} minSize={14} className="border-r border-gray-800/60 p-3 overflow-hidden">
           <DesignAgentList
             agents={agentList}
             selectedId={selectedAgentId}
             onSelect={setSelectedAgentId}
           />
-        </div>
-        <div className="p-4 overflow-hidden">
+        </Panel>
+        <PanelResizeHandle className="w-1.5 bg-gray-800/60 hover:bg-cyan-700/60 active:bg-cyan-500/60 transition-colors cursor-col-resize" />
+        <Panel defaultSize={56} minSize={30} className="p-4 overflow-hidden">
           <CritiqueDetailColumn
             agent={selectedAgent}
             agentIndex={selectedAgentId ? agentList.findIndex((a) => a.agent_id === selectedAgentId) : undefined}
           />
-        </div>
-        <div className="border-l border-gray-800/60 p-3 overflow-hidden">
+        </Panel>
+        <PanelResizeHandle className="w-1.5 bg-gray-800/60 hover:bg-cyan-700/60 active:bg-cyan-500/60 transition-colors cursor-col-resize" />
+        <Panel defaultSize={22} minSize={14} className="border-l border-gray-800/60 p-3 overflow-hidden">
           <DagLogColumn
             dag={dag}
             agentStates={agentStates}
@@ -250,8 +253,8 @@ export function DesignPage() {
             inputFields={activePipeline?.input_schema ?? []}
             mode="design"
           />
-        </div>
-      </div>
+        </Panel>
+      </PanelGroup>
     </div>
   );
 }
