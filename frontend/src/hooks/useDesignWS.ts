@@ -46,7 +46,7 @@ export function useDesignWS(pipelineId: string | null) {
               ...existing,
               critique_iterations: event.iterations,
               quality_score: event.quality_score,
-              critique_history: [...existing.critique_history, event.critique],
+              critique_history: [...(existing.critique_history ?? []), event.critique],
             });
           }
           break;

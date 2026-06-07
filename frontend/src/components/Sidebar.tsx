@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { listPipelines, createPipeline, deletePipeline } from "../api/client";
+import { listPipelines, deletePipeline } from "../api/client";
 import { usePipelineStore } from "../store/pipelineStore";
 
 export function Sidebar() {
@@ -14,18 +14,7 @@ export function Sidebar() {
       .catch(() => {});
   }, []);
 
-  const handleNewPipeline = async () => {
-    const objective = prompt("Enter your objective:");
-    if (!objective?.trim()) return;
-    try {
-      const { data } = await createPipeline(objective.trim());
-      const summary = { id: data.id, objective: data.objective, name: data.name, agent_count: 0, created_at: data.created_at };
-      usePipelineStore.getState().upsertSummary(summary);
-      navigate(`/design/${data.id}`);
-    } catch {
-      alert("Failed to create pipeline.");
-    }
-  };
+  const handleNewPipeline = () => navigate("/");
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();

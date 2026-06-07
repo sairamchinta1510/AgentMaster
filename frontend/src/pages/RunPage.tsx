@@ -57,6 +57,7 @@ export function RunPage() {
       setSelectedAgentId(last.agent_id as string);
     } else if (last.type === "RUN_COMPLETE" || last.type === "ERROR") {
       setRunningAgentId(null);
+      setSelectedAgentId(null); // show summary panel
     }
   }, [runEvents]);
 
@@ -298,15 +299,17 @@ export function RunPage() {
               agentDescription={selectedSpec?.description}
               result={selectedResult}
               isRunning={selectedAgentId === runningAgentId && isRunning}
-              userInputs={inputValues}
-              inputSchema={inputSchema}
-              onInputChange={(name, value) =>
-                setInputValues((v) => ({ ...v, [name]: value }))
-              }
-              onStartRun={handleStartRun}
-              starting={starting}
-              hasBlueprint={hasBlueprint}
-            />
+                isComplete={isComplete}
+                allResults={activeResults}
+                userInputs={inputValues}
+                inputSchema={inputSchema}
+                onInputChange={(name, value) =>
+                  setInputValues((v) => ({ ...v, [name]: value }))
+                }
+                onStartRun={handleStartRun}
+                starting={starting}
+                hasBlueprint={hasBlueprint}
+              />
           </div>
 
           {/* Col 3: DAG + log */}
