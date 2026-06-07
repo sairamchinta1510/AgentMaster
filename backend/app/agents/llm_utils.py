@@ -1,4 +1,8 @@
+import json
+import logging
 from openai import AsyncOpenAI
+
+logger = logging.getLogger(__name__)
 
 
 async def stream_llm_json(
@@ -6,7 +10,6 @@ async def stream_llm_json(
     model: str,
     messages: list,
     temperature: float = 0.1,
-    max_tokens: int = 4096,
     on_event=None,
     context: str = "",
 ) -> str:
@@ -16,7 +19,6 @@ async def stream_llm_json(
         messages=messages,
         response_format={"type": "json_object"},
         temperature=temperature,
-        max_tokens=max_tokens,
         stream=True,
     )
 
@@ -37,4 +39,11 @@ async def stream_llm_json(
     if on_event and token_count > last_reported:
         await on_event("LLM_STREAM", {"context": context, "tokens": token_count})
 
-    return full
+    if not full.strip():
+        raise ValueError(f"LLM returned empty response for context: {context}")
+
+    try:
+        return full
+    except Exception:
+        logger.error("LLM response for '%s' was not valid JSON (length=%d): %s…", context, len(full), full[:200])
+        raise
