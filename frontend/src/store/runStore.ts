@@ -6,6 +6,7 @@ import type { Run, AgentResult, DesignWSEvent, RunWSEvent, AtomicAgent, DAGData 
 interface DesignStore {
   isConnected: boolean;
   phase: string;
+  phaseMessage: string;
   events: DesignWSEvent[];
   agents: Record<string, AtomicAgent>;
   dag: DAGData | null;
@@ -13,6 +14,7 @@ interface DesignStore {
 
   setConnected: (v: boolean) => void;
   setPhase: (p: string) => void;
+  setPhaseMessage: (m: string) => void;
   addEvent: (e: DesignWSEvent) => void;
   upsertAgent: (a: AtomicAgent) => void;
   setAgentState: (id: string, state: AtomicAgent["state"]) => void;
@@ -24,6 +26,7 @@ interface DesignStore {
 export const useDesignStore = create<DesignStore>((set) => ({
   isConnected: false,
   phase: "DESIGNING",
+  phaseMessage: "",
   events: [],
   agents: {},
   dag: null,
@@ -31,6 +34,7 @@ export const useDesignStore = create<DesignStore>((set) => ({
 
   setConnected: (v) => set({ isConnected: v }),
   setPhase: (p) => set({ phase: p }),
+  setPhaseMessage: (m) => set({ phaseMessage: m }),
   addEvent: (e) => set((s) => ({ events: [...s.events, e].slice(-500) })),
   upsertAgent: (a) =>
     set((s) => ({ agents: { ...s.agents, [a.agent_id]: a } })),
@@ -43,7 +47,7 @@ export const useDesignStore = create<DesignStore>((set) => ({
   setDAG: (dag) => set({ dag }),
   setComplete: (v) => set({ isComplete: v }),
   reset: () =>
-    set({ isConnected: false, phase: "DESIGNING", events: [], agents: {}, dag: null, isComplete: false }),
+    set({ isConnected: false, phase: "DESIGNING", phaseMessage: "", events: [], agents: {}, dag: null, isComplete: false }),
 }));
 
 // ── Run-time store ───────────────────────────────────────────────────────────

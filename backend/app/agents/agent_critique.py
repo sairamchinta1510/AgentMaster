@@ -85,6 +85,7 @@ async def run_critique_loop(
     producer_agent,
     phase: str,
     max_iterations: int = 5,
+    on_event=None,
 ) -> tuple[CritiqueResult, AtomicAgent, int]:
     """Run the up-to-5-iteration critique loop.
 
@@ -95,6 +96,11 @@ async def run_critique_loop(
     final_result: CritiqueResult | None = None
 
     for iteration in range(1, max_iterations + 1):
+        if on_event:
+            await on_event("PHASE_UPDATE", {
+                "phase": f"DESIGN_CRITIQUE_{iteration}",
+                "message": f"Critique round {iteration}/5 — calling LLM to review {agent.agent_name}…",
+            })
         result = await critique_agent.critique(
             agent, phase, iteration, previous_issues or None
         )
@@ -104,10 +110,20 @@ async def run_critique_loop(
 
         if result.verdict == CritiqueVerdict.APPROVED:
             agent.quality_score = result.quality_score
+            if on_event:
+                await on_event("PHASE_UPDATE", {
+                    "phase": "APPROVED",
+                    "message": f"{agent.agent_name} approved ★{result.quality_score}/10 after {iteration} round(s)",
+                })
             return result, agent, iteration
 
         previous_issues = [i.model_dump() for i in result.issues]
         if iteration < max_iterations:
+            if on_event:
+                await on_event("PHASE_UPDATE", {
+                    "phase": "REVISING_SPEC",
+                    "message": f"Auto-fixing {len(result.issues)} issue(s) in {agent.agent_name} — calling LLM…",
+                })
             agent = await producer_agent.revise(agent, previous_issues, phase)
 
     # After max_iterations — escalate: errors must NEVER pass forward

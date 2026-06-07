@@ -1,20 +1,22 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { wsUrl } from "../api/client";
 import { useDesignStore } from "../store/runStore";
 import type { DesignWSEvent, AtomicAgent } from "../types";
 
 export function useDesignWS(pipelineId: string | null, trigger: number = 0) {
-  const ws = useRef<WebSocket | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+
+  const stop = useCallback(() => {
+    wsRef.current?.close();
+  }, []);
 
   useEffect(() => {
     if (!pipelineId) return;
-    // Use getState() inside the effect — avoids subscribing to store changes
-    // which would cause an infinite re-render loop if store were a hook dep.
     const s = useDesignStore.getState();
     s.reset();
 
     const socket = new WebSocket(wsUrl(`/ws/design/${pipelineId}`));
-    ws.current = socket;
+    wsRef.current = socket;
 
     socket.onopen = () => useDesignStore.getState().setConnected(true);
     socket.onclose = () => useDesignStore.getState().setConnected(false);
@@ -28,6 +30,7 @@ export function useDesignWS(pipelineId: string | null, trigger: number = 0) {
       switch (event.type) {
         case "PHASE_UPDATE":
           store.setPhase(event.phase);
+          store.setPhaseMessage(event.message);
           break;
         case "DAG_BUILT":
           store.setDAG(event.dag);
@@ -52,6 +55,7 @@ export function useDesignWS(pipelineId: string | null, trigger: number = 0) {
         }
         case "DESIGN_COMPLETE":
           store.setComplete(true);
+          store.setPhaseMessage("Design complete — all agents approved");
           break;
         default:
           break;
@@ -59,7 +63,7 @@ export function useDesignWS(pipelineId: string | null, trigger: number = 0) {
     };
 
     return () => socket.close();
-  }, [pipelineId, trigger]); // store intentionally excluded — use getState() instead
+  }, [pipelineId, trigger]);
 
-  return ws;
+  return { stop };
 }

@@ -37,11 +37,11 @@ export function DesignPage() {
   const { pipelineId } = useParams<{ pipelineId: string }>();
   const navigate = useNavigate();
   const { activePipeline, setActivePipeline, upsertSummary } = usePipelineStore();
-  const { isConnected, events, agents, dag, isComplete, phase } = useDesignStore();
+  const { isConnected, events, agents, dag, isComplete, phase, phaseMessage } = useDesignStore();
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [designTrigger, setDesignTrigger] = useState(0);
 
-  useDesignWS(pipelineId ?? null, designTrigger);
+  const { stop } = useDesignWS(pipelineId ?? null, designTrigger);
 
   useEffect(() => {
     if (!pipelineId) return;
@@ -141,14 +141,28 @@ export function DesignPage() {
     <div className="flex flex-col h-full bg-[#0a0e1a] text-white overflow-hidden">
       <div className="shrink-0 px-5 pt-3 pb-1 flex items-center gap-3">
         <span className="text-orange-400 text-base">🔥</span>
-        <span className="text-orange-400 font-bold font-mono tracking-widest text-sm">DESIGN TIME</span>
+        <span className="text-orange-400 font-bold font-mono tracking-widest text-sm shrink-0">DESIGN TIME</span>
         {isWorking && (
-          <span className="flex items-center text-xs text-gray-600 font-mono">
-            · AI is working<ThinkingDots />
-          </span>
+          <>
+            <span className="text-gray-700 font-mono text-xs shrink-0">·</span>
+            <span className="text-cyan-300 text-xs font-mono truncate">
+              {phaseMessage || "AI is working…"}
+            </span>
+            <ThinkingDots />
+            <button
+              className="ml-auto shrink-0 flex items-center gap-1.5 bg-red-900/50 hover:bg-red-800 text-red-300 border border-red-700/60 text-xs font-bold px-3 py-1 rounded-lg font-mono transition-colors"
+              onClick={stop}
+              title="Stop design process"
+            >
+              ⏹ Stop
+            </button>
+          </>
         )}
         {isComplete && (
-          <span className="text-xs text-green-500 font-mono">· Blueprint complete</span>
+          <span className="text-xs text-green-500 font-mono">· {phaseMessage || "Blueprint complete"}</span>
+        )}
+        {!isWorking && !isComplete && phaseMessage && (
+          <span className="text-xs text-gray-600 font-mono truncate">· {phaseMessage}</span>
         )}
       </div>
 

@@ -35,9 +35,11 @@ async def ws_design_handler(websocket: WebSocket, pipeline_id: str):
             return
 
         master = AgentMasterAgent()
-        await send("PHASE_UPDATE", {"phase": "DESIGNING", "message": "AgentMaster is designing the agent blueprint..."})
+        await send("PHASE_UPDATE", {"phase": "ANALYZING_OBJECTIVE", "message": "Calling LLM to analyze objective and design agent pipeline…"})
         blueprint = await master.design_blueprint_raw(pipeline.objective)
+        n_agents = len(blueprint.get("agents", []))
         await send("BLUEPRINT_READY", {"blueprint": blueprint})
+        await send("PHASE_UPDATE", {"phase": "BLUEPRINT_READY", "message": f"Blueprint ready — {n_agents} atomic agent(s) identified"})
 
         dag = master.build_dag_from_blueprint(blueprint, pipeline_id)
         await send(
@@ -49,20 +51,23 @@ async def ws_design_handler(websocket: WebSocket, pipeline_id: str):
                 }
             },
         )
+        await send("PHASE_UPDATE", {"phase": "DAG_BUILT", "message": f"Execution graph built — {n_agents} node(s) in pipeline"})
 
         producer = AgentProducerAgent()
         critique_agent = AgentCritiqueAgent()
         approved_count = 0
 
-        for agent_spec in blueprint.get("agents", []):
+        for i, agent_spec in enumerate(blueprint.get("agents", []), 1):
+            agent_name = agent_spec.get("agent_name", "Agent")
             await send(
                 "AGENT_STARTED",
                 {
                     "agent_id": agent_spec["agent_id"],
-                    "agent_name": agent_spec["agent_name"],
+                    "agent_name": agent_name,
                     "state": AgentState.SPECIFYING,
                 },
             )
+            await send("PHASE_UPDATE", {"phase": "SPECIFYING_AGENT", "message": f"[{i}/{n_agents}] Calling LLM to specify: {agent_name}…"})
             agent = await producer.produce(
                 agent_spec,
                 "design_time",
@@ -76,9 +81,10 @@ async def ws_design_handler(websocket: WebSocket, pipeline_id: str):
                     "spec": agent.model_dump(exclude={"critique_history"}),
                 },
             )
+            await send("PHASE_UPDATE", {"phase": "AGENT_SPECIFIED", "message": f"[{i}/{n_agents}] {agent_name} specified — starting critique loop…"})
 
             final_critique, final_agent, iterations = await run_critique_loop(
-                agent, critique_agent, producer, "design_time"
+                agent, critique_agent, producer, "design_time", on_event=send
             )
             await send(
                 "CRITIQUE_COMPLETE",
