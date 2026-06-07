@@ -5,40 +5,39 @@ import type { DesignWSEvent, AtomicAgent } from "../types";
 
 export function useDesignWS(pipelineId: string | null, trigger: number = 0) {
   const ws = useRef<WebSocket | null>(null);
-  const store = useDesignStore();
 
   useEffect(() => {
     if (!pipelineId) return;
-    store.reset();
+    // Use getState() inside the effect — avoids subscribing to store changes
+    // which would cause an infinite re-render loop if store were a hook dep.
+    const s = useDesignStore.getState();
+    s.reset();
 
     const socket = new WebSocket(wsUrl(`/ws/design/${pipelineId}`));
     ws.current = socket;
 
-    socket.onopen = () => store.setConnected(true);
-    socket.onclose = () => store.setConnected(false);
-    socket.onerror = () => store.setConnected(false);
+    socket.onopen = () => useDesignStore.getState().setConnected(true);
+    socket.onclose = () => useDesignStore.getState().setConnected(false);
+    socket.onerror = () => useDesignStore.getState().setConnected(false);
 
     socket.onmessage = (e: MessageEvent) => {
       const event = JSON.parse(e.data as string) as DesignWSEvent;
+      const store = useDesignStore.getState();
       store.addEvent(event);
 
       switch (event.type) {
         case "PHASE_UPDATE":
           store.setPhase(event.phase);
           break;
-
         case "DAG_BUILT":
           store.setDAG(event.dag);
           break;
-
         case "AGENT_PRODUCED":
           store.upsertAgent(event.spec as AtomicAgent);
           break;
-
         case "AGENT_STATE_CHANGE":
           store.setAgentState(event.agent_id, event.state);
           break;
-
         case "CRITIQUE_COMPLETE": {
           const existing = useDesignStore.getState().agents[event.agent_id];
           if (existing) {
@@ -51,20 +50,16 @@ export function useDesignWS(pipelineId: string | null, trigger: number = 0) {
           }
           break;
         }
-
         case "DESIGN_COMPLETE":
           store.setComplete(true);
           break;
-
         default:
           break;
       }
     };
 
-    return () => {
-      socket.close();
-    };
-  }, [pipelineId, store, trigger]);
+    return () => socket.close();
+  }, [pipelineId, trigger]); // store intentionally excluded — use getState() instead
 
   return ws;
 }

@@ -5,21 +5,21 @@ import type { RunWSEvent, AgentResult } from "../types";
 
 export function useRunWS(runId: string | null) {
   const ws = useRef<WebSocket | null>(null);
-  const store = useRunStore();
 
   useEffect(() => {
     if (!runId) return;
-    store.reset();
+    useRunStore.getState().reset();
 
     const socket = new WebSocket(wsUrl(`/ws/run/${runId}`));
     ws.current = socket;
 
-    socket.onopen = () => store.setConnected(true);
-    socket.onclose = () => store.setConnected(false);
-    socket.onerror = () => store.setConnected(false);
+    socket.onopen = () => useRunStore.getState().setConnected(true);
+    socket.onclose = () => useRunStore.getState().setConnected(false);
+    socket.onerror = () => useRunStore.getState().setConnected(false);
 
     socket.onmessage = (e: MessageEvent) => {
       const event = JSON.parse(e.data as string) as RunWSEvent;
+      const store = useRunStore.getState();
       store.addRunEvent(event);
 
       switch (event.type) {
@@ -33,22 +33,16 @@ export function useRunWS(runId: string | null) {
             duration_ms: event.duration_ms,
           });
           break;
-
         case "RUN_COMPLETE":
           store.setComplete(true);
-          for (const r of event.results) {
-            store.upsertResult(r);
-          }
+          for (const r of event.results) store.upsertResult(r);
           break;
-
         default:
           break;
       }
     };
 
-    return () => {
-      socket.close();
-    };
+    return () => socket.close();
   }, [runId]);
 
   return ws;
