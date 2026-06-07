@@ -1,4 +1,6 @@
 // frontend/src/components/CritiqueDetailColumn.tsx
+import { useState } from "react";
+import { useDesignStore } from "../store/runStore";
 import type { AtomicAgent, CritiqueResult, CritiqueIssue } from "../types";
 
 const CIRCLED = ["①","②","③","④","⑤","⑥","⑦","⑧","⑨","⑩","⑪","⑫","⑬","⑭","⑮"];
@@ -93,6 +95,8 @@ export function CritiqueDetailColumn({ agent, agentIndex }: CritiqueDetailColumn
   const isApproved = agent.state === "APPROVED" || agent.state === "COMPLETED";
   const isCritiquing = agent.state.startsWith("DESIGN_CRITIQUE");
   const currentRound = isCritiquing ? agent.state.slice(-1) : null;
+  const llmStreamText = useDesignStore((s) => s.llmStreamText);
+  const [aspectsOpen, setAspectsOpen] = useState(false);
 
   const circled = agentIndex != null ? (CIRCLED[agentIndex] ?? `${agentIndex + 1}`) : "";
 
@@ -122,6 +126,19 @@ export function CritiqueDetailColumn({ agent, agentIndex }: CritiqueDetailColumn
 
       {/* Round tracker */}
       <RoundTracker critiques={critiqueHistory} state={agent.state} />
+
+      {isCritiquing && llmStreamText && (
+        <div className="shrink-0 mb-4 bg-[#0a0c14] border border-amber-800/40 rounded-xl p-3">
+          <div className="text-xs text-amber-600 mb-1.5 uppercase tracking-wider flex items-center gap-1.5">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse inline-block" />
+            LLM thinking…
+          </div>
+          <div className="text-gray-400 text-xs leading-relaxed font-mono whitespace-pre-wrap break-words max-h-24 overflow-hidden">
+            {llmStreamText}
+            <span className="inline-block h-3 w-1.5 bg-amber-400 animate-pulse ml-0.5 align-middle" />
+          </div>
+        </div>
+      )}
 
       {/* Issues */}
       <div className="flex-1 overflow-y-auto">
@@ -156,9 +173,16 @@ export function CritiqueDetailColumn({ agent, agentIndex }: CritiqueDetailColumn
 
             {(latestCritique.approved_aspects ?? []).length > 0 && (
               <div className="mt-3">
-                <div className="text-xs text-gray-600 mb-1.5 uppercase tracking-wider">Approved aspects</div>
-                {(latestCritique.approved_aspects ?? []).map((a, i) => (
-                  <div key={i} className="text-xs text-green-500 mb-1">✓ {a}</div>
+                <button
+                  className="flex items-center gap-2 text-xs text-gray-600 hover:text-gray-400 uppercase tracking-wider mb-1.5 w-full text-left"
+                  onClick={() => setAspectsOpen((v) => !v)}
+                >
+                  <span className="text-green-600">✓</span>
+                  Approved aspects ({(latestCritique.approved_aspects ?? []).length})
+                  <span className="ml-auto">{aspectsOpen ? "▲" : "▼"}</span>
+                </button>
+                {aspectsOpen && (latestCritique.approved_aspects ?? []).map((a, i) => (
+                  <div key={i} className="text-xs text-green-500/70 mb-1 pl-2">✓ {String(a)}</div>
                 ))}
               </div>
             )}

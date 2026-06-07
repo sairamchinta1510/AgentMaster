@@ -3,6 +3,16 @@ import type { AtomicAgent, AgentResult } from "../types";
 
 const CIRCLED = ["①","②","③","④","⑤","⑥","⑦","⑧","⑨","⑩","⑪","⑫","⑬","⑭","⑮","⑯","⑰","⑱","⑲","⑳"];
 
+function outputPreview(output: Record<string, unknown>): string | null {
+  const entries = Object.entries(output);
+  if (entries.length === 0) return null;
+  const [key, val] = entries[0];
+  if (typeof val === "string") return `${key}: ${val.slice(0, 45)}${val.length > 45 ? "…" : ""}`;
+  if (Array.isArray(val)) return `${key}: [${(val as unknown[]).length} items]`;
+  if (typeof val === "number") return `${key}: ${val}`;
+  return null;
+}
+
 function cardColors(state: AtomicAgent["state"]): { border: string; bg: string; numColor: string; glow: string } {
   if (state === "APPROVED" || state === "COMPLETED")
     return { border: "border-l-green-500", bg: "bg-[#071c0f]", numColor: "text-green-400", glow: "" };
@@ -82,16 +92,22 @@ export function DesignAgentList({ agents, selectedId, onSelect }: DesignAgentLis
                 isSelected ? "ring-1 ring-gray-500" : "hover:brightness-125"
               }`}
             >
-              <div className="flex items-center gap-2">
-                <span className={`text-lg font-bold shrink-0 ${numColor}`}>{CIRCLED[idx] ?? idx + 1}</span>
-                <span className="text-white font-semibold text-sm truncate">{a.agent_name}</span>
+              <div className="flex items-center justify-between gap-1 w-full">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className={`text-lg font-bold shrink-0 ${numColor}`}>{CIRCLED[idx] ?? idx + 1}</span>
+                  <span className="text-white font-semibold text-sm truncate">{a.agent_name}</span>
+                </div>
+                {a.quality_score != null && (
+                  <span className={`text-xs font-bold shrink-0 px-1.5 py-0.5 rounded ${
+                    a.quality_score >= 8 ? "bg-green-900/50 text-green-300" :
+                    a.quality_score >= 6 ? "bg-yellow-900/50 text-yellow-300" :
+                                           "bg-red-900/50 text-red-300"
+                  }`}>★{a.quality_score}</span>
+                )}
               </div>
               <CritiqueDots iterations={a.critique_iterations ?? 0} state={a.state} />
               <div className={`text-xs mt-1.5 flex items-center gap-2 ${cls}`}>
                 <span>{label}</span>
-                {a.quality_score != null && (
-                  <span className="text-yellow-400 font-bold">★{a.quality_score}</span>
-                )}
               </div>
             </button>
           );
@@ -153,6 +169,11 @@ export function RunAgentList({ agents, results, runningId, selectedId, onSelect 
                   <span className="text-gray-600">waiting</span>
                 )}
               </div>
+              {result?.status === "completed" && result.output && outputPreview(result.output) && (
+                <div className="text-xs text-gray-600 mt-0.5 truncate font-mono">
+                  📄 {outputPreview(result.output)}
+                </div>
+              )}
             </button>
           );
         })}
