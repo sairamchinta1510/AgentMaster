@@ -59,11 +59,11 @@ class CritiqueResult(BaseModel):
     quality_score: float = 0.0
     errors_remaining: int = 0
     issues: list[CritiqueIssue] = Field(default_factory=list)
-    approved_aspects: list[str] = Field(default_factory=list)
-    improvements_made: list[str] = Field(default_factory=list)
-    remaining_errors: list[str] = Field(default_factory=list)
-    suggested_new_agents: list[str] = Field(default_factory=list)
-    missing_user_inputs: list[str] = Field(default_factory=list)
+    approved_aspects: list[Any] = Field(default_factory=list)
+    improvements_made: list[Any] = Field(default_factory=list)
+    remaining_errors: list[Any] = Field(default_factory=list)
+    suggested_new_agents: list[Any] = Field(default_factory=list)
+    missing_user_inputs: list[Any] = Field(default_factory=list)
 
 
 class AtomicAgent(BaseModel):
