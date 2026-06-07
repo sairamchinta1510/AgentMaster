@@ -1,16 +1,23 @@
 import json
 import logging
 from openai import AsyncOpenAI
+from app.config import settings
 from app.prompts.producer import get_producer_prompt
 from app.models.agent import AtomicAgent
 
 logger = logging.getLogger(__name__)
 
 
+def make_llm_client() -> tuple[AsyncOpenAI, str]:
+    return AsyncOpenAI(
+        api_key=settings.active_api_key,
+        base_url=settings.active_base_url,
+    ), settings.active_model
+
+
 class AgentProducerAgent:
-    def __init__(self, api_key: str, model: str = "gpt-4o"):
-        self.client = AsyncOpenAI(api_key=api_key)
-        self.model = model
+    def __init__(self, api_key: str | None = None, model: str | None = None):
+        self.client, self.model = make_llm_client()
 
     async def produce(
         self,

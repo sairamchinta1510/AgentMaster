@@ -37,17 +37,17 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             [f"- {r['name']}: {r['objective']}" for r in library_results]
         )
 
-        if not settings.openai_api_key:
+        if not settings.active_api_key:
             await send(
                 "ERROR",
-                {"message": "OPENAI_API_KEY not configured. Set it in backend/.env to enable LLM agents."},
+                {"message": "No API key configured. Add GEMINI_API_KEY (or OPENAI_API_KEY) to backend/.env"},
             )
             await websocket.close()
             return
 
         # Design blueprint via AgentMaster
+        master = AgentMasterAgent()
         await send("PHASE_UPDATE", {"phase": "DESIGN", "message": "AgentMaster is designing the agent blueprint..."})
-        master = AgentMasterAgent(api_key=settings.openai_api_key)
         blueprint = await master.design_blueprint(session, library_context)
         await send("BLUEPRINT_READY", {"blueprint": blueprint})
 
@@ -60,8 +60,8 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
         await send("DAG_BUILT", {"dag": dag_data})
 
         # Process each agent: Producer → Critique loop
-        producer = AgentProducerAgent(api_key=settings.openai_api_key)
-        critique = AgentCritiqueAgent(api_key=settings.openai_api_key)
+        producer = AgentProducerAgent()
+        critique = AgentCritiqueAgent()
 
         approved_count = 0
         for agent_spec in blueprint.get("agents", []):

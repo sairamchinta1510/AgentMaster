@@ -1,17 +1,28 @@
 import json
 import logging
 from openai import AsyncOpenAI
+from app.config import settings
 from app.prompts.critique import get_critique_prompt
 from app.models.agent import AtomicAgent, CritiqueResult, CritiqueVerdict, CritiqueIssue
 
 logger = logging.getLogger(__name__)
 
 
+def make_llm_client() -> tuple[AsyncOpenAI, str]:
+    return AsyncOpenAI(
+        api_key=settings.active_api_key,
+        base_url=settings.active_base_url,
+    ), settings.active_model
+
+
 class AgentCritiqueAgent:
-    def __init__(self, api_key: str, model: str = "gpt-4o"):
-        self._api_key = api_key
-        self.client = AsyncOpenAI(api_key=api_key) if api_key != "fake" else None
-        self.model = model
+    def __init__(self, api_key: str | None = None, model: str | None = None):
+        self._api_key = api_key or ""
+        if api_key == "fake":
+            self.client = None
+            self.model = "fake"
+        else:
+            self.client, self.model = make_llm_client()
 
     async def _call_llm(
         self,
