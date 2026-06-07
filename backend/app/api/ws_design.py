@@ -8,6 +8,7 @@ from app.agents.agent_producer import AgentProducerAgent
 from app.agents.agent_critique import AgentCritiqueAgent, run_critique_loop
 from app.models.pipeline import PipelineORM
 from app.models.agent import AgentState
+from app.models.dag import DAGNode, DAGEdge
 from app.config import settings
 from app.gcs_backup import backup_to_gcs
 
@@ -85,24 +86,85 @@ async def ws_design_handler(websocket: WebSocket, pipeline_id: str):
             )
             await send("PHASE_UPDATE", {"phase": "AGENT_SPECIFIED", "message": f"[{i}/{n_agents}] {agent_name} specified — starting critique loop…"})
 
-            final_critique, final_agent, iterations = await run_critique_loop(
+            final_critique, result_agents, iterations = await run_critique_loop(
                 agent, critique_agent, producer, "design_time", on_event=send
             )
-            await send(
-                "CRITIQUE_COMPLETE",
-                {
-                    "agent_id": agent.agent_id,
-                    "iterations": iterations,
-                    "verdict": final_critique.verdict,
-                    "quality_score": final_critique.quality_score,
-                    "critique": final_critique.model_dump(),
-                },
-            )
 
-            state = AgentState.APPROVED if final_critique.errors_remaining == 0 else AgentState.USER_ESCALATED
-            if state == AgentState.APPROVED:
-                approved_count += 1
-            await send("AGENT_STATE_CHANGE", {"agent_id": final_agent.agent_id, "state": state})
+            if len(result_agents) > 1:
+                orig_node_id = f"node_{agent.agent_id}"
+                predecessors = [edge.from_node for edge in dag.edges if edge.to_node == orig_node_id]
+                successors = [edge.to_node for edge in dag.edges if edge.from_node == orig_node_id]
+
+                dag.nodes.pop(orig_node_id, None)
+                dag.edges = [
+                    edge for edge in dag.edges
+                    if edge.from_node != orig_node_id and edge.to_node != orig_node_id
+                ]
+                for node in dag.nodes.values():
+                    node.depends_on = [dep for dep in node.depends_on if dep != orig_node_id]
+
+                prev_node_id = None
+                for sub_agent in result_agents:
+                    new_node_id = f"node_{sub_agent.agent_id}"
+                    dag.add_node(DAGNode(
+                        node_id=new_node_id,
+                        agent_id=sub_agent.agent_id,
+                        agent_name=sub_agent.agent_name,
+                    ))
+                    if prev_node_id:
+                        dag.add_edge(DAGEdge(
+                            edge_id=f"e_{prev_node_id}_{new_node_id}",
+                            from_node=prev_node_id,
+                            to_node=new_node_id,
+                        ))
+                    prev_node_id = new_node_id
+
+                first_node_id = f"node_{result_agents[0].agent_id}"
+                for pred in predecessors:
+                    dag.add_edge(DAGEdge(
+                        edge_id=f"e_{pred}_{first_node_id}",
+                        from_node=pred,
+                        to_node=first_node_id,
+                    ))
+
+                last_node_id = f"node_{result_agents[-1].agent_id}"
+                for succ in successors:
+                    dag.add_edge(DAGEdge(
+                        edge_id=f"e_{last_node_id}_{succ}",
+                        from_node=last_node_id,
+                        to_node=succ,
+                    ))
+
+                await send(
+                    "DAG_UPDATED",
+                    {
+                        "dag": {
+                            "nodes": [node.model_dump() for node in dag.nodes.values()],
+                            "edges": [edge.model_dump() for edge in dag.edges],
+                        },
+                        "message": (
+                            f"Agent '{agent.agent_name}' decomposed into "
+                            f"{len(result_agents)} atomic sub-agents"
+                        ),
+                    },
+                )
+
+            for final_agent in result_agents:
+                await send(
+                    "CRITIQUE_COMPLETE",
+                    {
+                        "agent_id": final_agent.agent_id,
+                        "iterations": iterations,
+                        "verdict": final_critique.verdict,
+                        "quality_score": final_critique.quality_score,
+                        "critique": final_critique.model_dump(),
+                    },
+                )
+
+                state = AgentState.APPROVED if final_critique.errors_remaining == 0 else AgentState.USER_ESCALATED
+                if state == AgentState.APPROVED:
+                    approved_count += 1
+                await send("AGENT_STATE_CHANGE", {"agent_id": final_agent.agent_id, "state": state})
 
         input_fields = [
             {
