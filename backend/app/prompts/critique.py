@@ -30,7 +30,7 @@ errors_remaining MUST be 0 for verdict APPROVED. Non-zero errors_remaining force
 ## DECOMPOSITION RULE
 Whenever you raise an atomicity issue (category == "atomicity"), you MUST populate
 suggested_new_agents with the complete decomposition — one entry per atomic sub-agent.
-An atomicity issue with an empty suggested_new_agents list is invalid and will be rejected.
+An atomicity issue with an empty suggested_new_agents list means the system cannot auto-decompose and will escalate to the user — always populate it.
 Each sub-agent entry must contain: agent_name, description, input_schema, output_schema.
 
 ## OUTPUT FORMAT
