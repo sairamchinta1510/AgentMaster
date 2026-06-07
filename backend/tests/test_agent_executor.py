@@ -82,3 +82,63 @@ async def test_invalid_action_raises():
 
     assert result.status == "failed"
     assert "unknown action" in (result.error or "").lower()
+
+
+@pytest.mark.asyncio
+async def test_retries_on_exec_failure_and_succeeds():
+    """If code fails on first execution, agent re-plans with error context and succeeds."""
+    executor = AgentExecutorAgent()
+
+    plan_fail = MagicMock()
+    plan_fail.choices[0].message.content = (
+        '{"action": "EXECUTE_CODE", "code": "raise RuntimeError(\'oops\')", "credential_keys": []}'
+    )
+    plan_ok = MagicMock()
+    plan_ok.choices[0].message.content = (
+        '{"action": "EXECUTE_CODE", "code": "print(\'fixed\')", "credential_keys": []}'
+    )
+    synth = MagicMock()
+    synth.choices[0].message.content = '{"result": "fixed"}'
+
+    responses = [plan_fail, plan_ok, synth]
+    call_count = 0
+
+    async def mock_create(**kwargs):
+        nonlocal call_count
+        r = responses[call_count]
+        call_count += 1
+        return r
+
+    exec_results = [("", "RuntimeError: oops", 1), ("fixed\n", "", 0)]
+    exec_count = 0
+
+    async def mock_exec(code, env):
+        nonlocal exec_count
+        r = exec_results[exec_count]
+        exec_count += 1
+        return r
+
+    with patch.object(executor.client.chat.completions, "create", new=mock_create), \
+         patch("app.agents.agent_executor.execute_python_code", new=mock_exec):
+        result = await executor.execute(AGENT_SPEC, {})
+
+    assert result.status == "completed"
+    assert result.output.get("result") == "fixed"
+
+
+@pytest.mark.asyncio
+async def test_fails_after_max_retries_exhausted():
+    """Agent gives up and returns failed after all retry attempts are exhausted."""
+    executor = AgentExecutorAgent()
+
+    plan_response = MagicMock()
+    plan_response.choices[0].message.content = (
+        '{"action": "EXECUTE_CODE", "code": "raise RuntimeError(\'always fails\')", "credential_keys": []}'
+    )
+
+    with patch.object(executor.client.chat.completions, "create", new=AsyncMock(return_value=plan_response)), \
+         patch("app.agents.agent_executor.execute_python_code", new=AsyncMock(return_value=("", "RuntimeError: always fails", 1))):
+        result = await executor.execute(AGENT_SPEC, {})
+
+    assert result.status == "failed"
+    assert result.error is not None

@@ -145,8 +145,6 @@ class AgentExecutorAgent:
             # ── EXEC phase ───────────────────────────────────────────────────
             code = plan.get("code", "")
             credential_keys = plan.get("credential_keys", [])
-            code_preview = code[:200] if code else None
-            await emit("executing", code_preview)
 
             # Inject ALL context inputs as uppercased env vars so generated code
             # can read any input (paths, URLs, names, credentials) via os.environ.
@@ -157,15 +155,61 @@ class AgentExecutorAgent:
                 if not k.startswith("_") and v is not None
             }
 
-            # ── REVIEW phase ─────────────────────────────────────────────────
-            await emit("reviewing", code_preview)
-            code, review_changes = await review_and_fix_code(
-                code, env_vars, self.client, self.model
-            )
-            if review_changes:
-                logger.info("Code reviewer fixed %d issue(s) in %s", len(review_changes), agent_id)
+            MAX_RETRIES = 3
+            last_error: str = ""
+            plan_prompt_base = plan_prompt  # keep for retry re-plan
 
-            stdout, stderr, returncode = await execute_python_code(code, env_vars)
+            for attempt in range(1, MAX_RETRIES + 1):
+                code_preview = code[:200] if code else None
+
+                # ── REVIEW phase ─────────────────────────────────────────────
+                await emit("reviewing", code_preview)
+                code, review_changes = await review_and_fix_code(
+                    code, env_vars, self.client, self.model
+                )
+                if review_changes:
+                    logger.info(
+                        "[%s] attempt %d: reviewer fixed %d issue(s): %s",
+                        agent_id, attempt, len(review_changes), review_changes,
+                    )
+
+                await emit("executing", code[:200] if code else None)
+                stdout, stderr, returncode = await execute_python_code(code, env_vars)
+
+                if returncode == 0:
+                    break  # success
+
+                # Execution failed — retry with error context injected into re-plan
+                last_error = stderr or stdout or f"Exit code {returncode}"
+                logger.warning(
+                    "[%s] attempt %d/%d failed: %s",
+                    agent_id, attempt, MAX_RETRIES, last_error[:200],
+                )
+
+                if attempt < MAX_RETRIES:
+                    await emit("planning")  # signal UI we're re-planning
+                    retry_prompt = (
+                        plan_prompt_base
+                        + f"\n\nPREVIOUS ATTEMPT FAILED (attempt {attempt}/{MAX_RETRIES}):\n"
+                        + f"Error:\n{last_error[:500]}\n\n"
+                        + "Fix the code and try again. Do NOT repeat the same mistake."
+                    )
+                    retry_response = await self.client.chat.completions.create(
+                        model=self.model,
+                        messages=[
+                            {"role": "system", "content": PLAN_SYSTEM_PROMPT},
+                            {"role": "user", "content": retry_prompt},
+                        ],
+                        response_format={"type": "json_object"},
+                        temperature=0.2,
+                    )
+                    retry_plan = _parse_llm_json(retry_response.choices[0].message.content)
+                    code = retry_plan.get("code", code)
+            else:
+                # All retries exhausted
+                raise RuntimeError(
+                    f"Agent failed after {MAX_RETRIES} attempts. Last error: {last_error[:300]}"
+                )
 
             # ── SYNTH phase ──────────────────────────────────────────────────
             await emit("synthesising")

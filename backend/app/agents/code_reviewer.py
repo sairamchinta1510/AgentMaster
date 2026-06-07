@@ -3,14 +3,21 @@
 Sits between PLAN and EXEC in AgentExecutorAgent:
   PLAN → REVIEW → EXEC → SYNTH
 
-detect_code_issues() performs fast static analysis (no LLM).
-review_and_fix_code() calls the LLM only when issues are found.
+fix_missing_imports()  — zero-LLM: auto-injects missing stdlib imports
+detect_code_issues()   — zero-LLM: static analysis for unsafe patterns
+review_and_fix_code()  — LLM fix only when issues found
 """
 import json
 import logging
 import re
 
 logger = logging.getLogger(__name__)
+
+# Standard library modules whose usage we can detect and auto-import
+_STDLIB_MODULES = [
+    "sys", "os", "json", "re", "subprocess", "pathlib",
+    "tempfile", "glob", "shutil", "datetime", "time", "uuid",
+]
 
 # Regex for hardcoded /tmp/<name> paths (not using tempfile)
 _HARDCODED_TMP_RE = re.compile(r'["\']\/tmp\/\w+')
@@ -36,6 +43,30 @@ Rules:
 Return ONLY valid JSON:
 {"fixed_code": "<corrected python>", "changes": ["change description", ...]}
 """
+
+
+def fix_missing_imports(code: str) -> tuple[str, list[str]]:
+    """Auto-inject missing stdlib imports at the top of the code.
+
+    Scans for module usage (e.g. ``sys.``, ``json.``) and prepends
+    ``import <module>`` for any that are used but not already imported.
+    No LLM call required.
+    """
+    changes: list[str] = []
+    to_add: list[str] = []
+    for module in _STDLIB_MODULES:
+        used = bool(re.search(rf'\b{re.escape(module)}\.', code))
+        # Match both `import module` and `import a, module, b` forms
+        already_imported = bool(
+            re.search(rf'\bimport\s[^\n]*\b{re.escape(module)}\b', code)
+            or re.search(rf'from\s+{re.escape(module)}\s+import', code)
+        )
+        if used and not already_imported:
+            to_add.append(f"import {module}")
+            changes.append(f"Added missing import: {module}")
+    if to_add:
+        code = "\n".join(to_add) + "\n" + code
+    return code, changes
 
 
 def detect_code_issues(code: str, available_inputs: dict) -> list[str]:
@@ -76,13 +107,24 @@ async def review_and_fix_code(
 ) -> tuple[str, list[str]]:
     """Review code for issues and fix via LLM if needed.
 
+    Steps (in order, zero-LLM first):
+    1. fix_missing_imports — auto-inject missing stdlib imports
+    2. detect_code_issues  — static analysis for unsafe patterns
+    3. If issues found → LLM fix pass; otherwise return immediately
+
     Returns (final_code, list_of_changes).
-    If no issues are found, returns (original_code, []) without calling the LLM.
-    If LLM returns invalid JSON, falls back to original code rather than crashing.
+    Falls back to original code if LLM fix fails — never crashes.
     """
+    all_changes: list[str] = []
+
+    # Step 1: auto-fix missing imports (no LLM)
+    code, import_changes = fix_missing_imports(code)
+    all_changes.extend(import_changes)
+
+    # Step 2: static analysis
     issues = detect_code_issues(code, available_inputs)
     if not issues:
-        return code, []
+        return code, all_changes
 
     logger.info("Code review found %d issue(s); requesting LLM fix", len(issues))
 
@@ -110,7 +152,8 @@ async def review_and_fix_code(
         if not fixed:
             raise ValueError("LLM returned empty fixed_code")
         logger.info("Code reviewer applied %d change(s): %s", len(changes), changes)
-        return fixed, changes
+        all_changes.extend(changes)
+        return fixed, all_changes
     except Exception as exc:
-        logger.warning("Code reviewer failed (%s); using original code", exc)
-        return code, []
+        logger.warning("Code reviewer failed (%s); using pre-LLM code", exc)
+        return code, all_changes

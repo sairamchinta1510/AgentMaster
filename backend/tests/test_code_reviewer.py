@@ -2,7 +2,7 @@ import json
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.agents.code_reviewer import detect_code_issues, review_and_fix_code
+from app.agents.code_reviewer import detect_code_issues, review_and_fix_code, fix_missing_imports
 
 
 # ── detect_code_issues (static analysis, no LLM) ─────────────────────────────
@@ -152,5 +152,39 @@ async def test_review_falls_back_to_original_if_llm_returns_invalid_json():
         model="gemini-pro",
     )
 
-    # Must not raise; falls back to original code
-    assert fixed == bad_code
+    # Must not raise; original logic preserved (missing import may have been injected)
+    assert 'subprocess.run(["git", "clone", url, "/tmp/repo"])' in fixed
+
+
+# ── fix_missing_imports (zero-LLM static fix) ────────────────────────────────
+
+def test_injects_missing_sys_import():
+    code = 'print("hi", file=sys.stderr)\n'
+    fixed, changes = fix_missing_imports(code)
+    assert "import sys" in fixed
+    assert any("sys" in c for c in changes)
+
+
+def test_injects_multiple_missing_imports():
+    code = (
+        "data = json.dumps({'a': 1})\n"
+        "path = pathlib.Path('/tmp')\n"
+    )
+    fixed, changes = fix_missing_imports(code)
+    assert "import json" in fixed
+    assert "import pathlib" in fixed
+    assert len(changes) == 2
+
+
+def test_does_not_double_inject_existing_import():
+    code = "import sys\nprint(sys.version)\n"
+    fixed, changes = fix_missing_imports(code)
+    assert fixed.count("import sys") == 1
+    assert changes == []
+
+
+def test_injects_import_at_top_of_file():
+    code = "x = 1\nprint(json.dumps(x))\n"
+    fixed, _ = fix_missing_imports(code)
+    lines = fixed.splitlines()
+    assert lines[0].startswith("import ")
