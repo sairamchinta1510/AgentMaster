@@ -80,6 +80,47 @@ class AgentCritiqueAgent:
         )
 
 
+async def decompose_agent(
+    original: AtomicAgent,
+    suggested: list[dict],
+    producer_agent,
+    critique_agent: AgentCritiqueAgent,
+    phase: str,
+    on_event=None,
+) -> list[AtomicAgent]:
+    """Produce and critique each suggested sub-agent, returning all approved ones.
+
+    Sub-agent critique loops run with allow_decompose=False to prevent
+    infinite recursion — sub-agents cannot themselves be decomposed further.
+    """
+    results: list[AtomicAgent] = []
+    for idx, spec in enumerate(suggested, 1):
+        sub_id = f"{original.agent_id}_part_{idx}"
+        full_spec = {
+            "agent_id": sub_id,
+            "agent_name": spec.get("agent_name", f"SubAgent{idx}"),
+            "description": spec.get("description", ""),
+            "input_schema": spec.get("input_schema", {}),
+            "output_schema": spec.get("output_schema", {}),
+            "depends_on": [],
+            "timeout_seconds": 60,
+        }
+        if on_event:
+            await on_event("PHASE_UPDATE", {
+                "phase": "DECOMPOSING",
+                "message": f"Decomposing into sub-agent {idx}/{len(suggested)}: {full_spec['agent_name']}…",
+            })
+        sub_agent = await producer_agent.produce(
+            full_spec, phase, original.session_id, on_event=on_event
+        )
+        _result, approved, _iters = await run_critique_loop(
+            sub_agent, critique_agent, producer_agent, phase,
+            on_event=on_event, allow_decompose=False,
+        )
+        results.extend(approved)
+    return results
+
+
 async def run_critique_loop(
     agent: AtomicAgent,
     critique_agent: AgentCritiqueAgent,
@@ -87,11 +128,15 @@ async def run_critique_loop(
     phase: str,
     max_iterations: int = 5,
     on_event=None,
-) -> tuple[CritiqueResult, AtomicAgent, int]:
+    allow_decompose: bool = True,
+) -> tuple[CritiqueResult, list[AtomicAgent], int]:
     """Run the up-to-5-iteration critique loop.
 
-    Returns (final_result, final_agent, iterations_used).
-    Errors NEVER pass forward — escalates after max_iterations if still failing.
+    Returns (final_result, list[AtomicAgent], iterations_used).
+    Normally returns a list of 1 agent. If an atomicity violation persists
+    on iteration 2+ and suggested_new_agents is populated, decomposes the
+    agent and returns N sub-agents instead. allow_decompose=False prevents
+    infinite recursion in nested calls.
     """
     previous_issues: list[dict] = []
     final_result: CritiqueResult | None = None
@@ -116,7 +161,29 @@ async def run_critique_loop(
                     "phase": "APPROVED",
                     "message": f"{agent.agent_name} approved ★{result.quality_score}/10 after {iteration} round(s)",
                 })
-            return result, agent, iteration
+            return result, [agent], iteration
+
+        has_atomicity_issue = any(i.category == "atomicity" for i in result.issues)
+        if (
+            allow_decompose
+            and iteration >= 2
+            and has_atomicity_issue
+            and result.suggested_new_agents
+        ):
+            if on_event:
+                await on_event("PHASE_UPDATE", {
+                    "phase": "DECOMPOSING",
+                    "message": (
+                        f"{agent.agent_name} has persistent atomicity violation — "
+                        f"decomposing into {len(result.suggested_new_agents)} sub-agent(s)…"
+                    ),
+                })
+            sub_agents = await decompose_agent(
+                agent, result.suggested_new_agents, producer_agent,
+                critique_agent, phase, on_event=on_event,
+            )
+            if sub_agents:
+                return result, sub_agents, iteration
 
         previous_issues = [i.model_dump() for i in result.issues]
         if iteration < max_iterations:
@@ -132,4 +199,4 @@ async def run_critique_loop(
     if final_result.errors_remaining > 0:
         final_result.verdict = CritiqueVerdict.ESCALATE_AUTO_FIX
 
-    return final_result, agent, max_iterations
+    return final_result, [agent], max_iterations
