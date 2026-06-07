@@ -62,7 +62,7 @@ async def execute_run_headless(run_id: str) -> None:
         try:
             run.status = "failed"
             db.commit()
-        except Exception:
-            pass
+        except Exception as commit_exc:
+            logger.error("Failed to mark run %s as failed: %s", run_id, commit_exc)
     finally:
         db.close()
