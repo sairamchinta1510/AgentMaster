@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AgentMaster — Run Time</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    background: #030712;
+    color: #e2e8f0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Objective banner ── */
+  .objective-banner {
+    background: linear-gradient(90deg, #120a24, #0e0720);
+    border-bottom: 1px solid #2d1b4e;
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
+  .objective-label {
+    font-size: 0.65rem;
+    color: #a855f7;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .objective-input-wrap { flex: 1; position: relative; }
+
+  .objective-input {
+    width: 100%;
+    background: #0e0720;
+    border: 1px solid #2d1b4e;
+    border-radius: 8px;
+    padding: 9px 14px;
+    color: #e2e8f0;
+    font-family: inherit;
+    font-size: 0.82rem;
+    outline: none;
+  }
+
+  .objective-input::placeholder { color: #334155; }
+
+  .run-btn {
+    background: linear-gradient(135deg, #7c3aed, #6d28d9);
+    color: white;
+    border: none;
+    padding: 9px 22px;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    white-space: nowrap;
+    letter-spacing: 0.03em;
+    box-shadow: 0 0 14px rgba(124,58,237,0.4);
+    transition: opacity 0.2s;
+    flex-shrink: 0;
+  }
+  .run-btn:hover { opacity: 0.85; }
+
+  /* ── Status bar ── */
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 20px;
+    background: #0f172a; border-bottom: 1px solid #1e293b; flex-shrink: 0;
+  }
+
+  .mode-badge-run {
+    background: linear-gradient(135deg, #7c3aed, #6d28d9);
+    color: white; padding: 3px 10px; border-radius: 20px;
+    font-size: 0.68rem; font-weight: 700; letter-spacing: 0.05em;
+  }
+
+  .stat-pill {
+    display: flex; align-items: center; gap: 5px;
+    padding: 3px 10px; border-radius: 20px; font-size: 0.68rem; font-weight: 600;
+  }
+  .stat-total { background: #1e293b; color: #94a3b8; }
+  .stat-done { background: #052e16; color: #4ade80; }
+  .stat-running { background: #1a1033; color: #a78bfa; animation: pulse-badge 1.5s infinite; }
+  .stat-failed { background: #2d0a0a; color: #f87171; }
+
+  .running-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #a855f7;
+    animation: pulse-purple 1.5s ease-in-out infinite;
+  }
+
+  /* ── Main grid ── */
+  .main {
+    flex: 1; display: grid;
+    grid-template-columns: 220px 1fr 200px;
+    gap: 12px; padding: 12px; overflow: hidden;
+  }
+
+  .col-header {
+    font-size: 0.6rem; color: #475569; font-weight: 700;
+    letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px;
+  }
+
+  /* ── Agent list ── */
+  .agent-list { display: flex; flex-direction: column; overflow: hidden; }
+  .agent-list-inner { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 4px; }
+
+  .agent-card {
+    border-radius: 10px; padding: 10px 12px; cursor: pointer;
+    transition: all 0.15s; border: 1px solid transparent; position: relative; overflow: hidden;
+  }
+  .agent-card::before {
+    content: ''; position: absolute;
+    left: 0; top: 0; bottom: 0; width: 3px; border-radius: 3px 0 0 3px;
+  }
+
+  .agent-card.completed { background: #071a0e; border-color: #166534; }
+  .agent-card.completed::before { background: #22c55e; }
+
+  .agent-card.running {
+    background: #100a24; border-color: #4c1d95;
+    box-shadow: 0 0 16px rgba(124,58,237,0.12);
+  }
+  .agent-card.running::before {
+    background: linear-gradient(180deg, #a855f7, #7c3aed);
+    animation: pulse-bar 1.5s ease-in-out infinite;
+  }
+
+  .agent-card.failed { background: #1a0505; border-color: #7f1d1d; }
+  .agent-card.failed::before { background: #ef4444; }
+
+  .agent-card.waiting { background: #0d1117; border-color: #1e293b; opacity: 0.5; }
+  .agent-card.active { border-color: #a855f7 !important; box-shadow: 0 0 0 1px #a855f7 !important; }
+
+  .agent-name { font-weight: 700; font-size: 0.78rem; margin-bottom: 2px; }
+  .agent-card.completed .agent-name { color: #86efac; }
+  .agent-card.running .agent-name { color: #c4b5fd; }
+  .agent-card.failed .agent-name { color: #fca5a5; }
+  .agent-card.waiting .agent-name { color: #64748b; }
+
+  .agent-meta { font-size: 0.63rem; color: #475569; margin-bottom: 6px; }
+
+  .agent-status-row { display: flex; align-items: center; justify-content: space-between; }
+  .status-tag { font-size: 0.62rem; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
+  .tag-completed { background: #052e16; color: #4ade80; }
+  .tag-running { background: #1a1033; color: #c4b5fd; animation: pulse-badge 1.2s infinite; }
+  .tag-failed { background: #2d0a0a; color: #f87171; }
+  .tag-waiting { color: #334155; }
+  .duration-text { font-size: 0.61rem; color: #475569; }
+
+  /* ── Execution detail panel ── */
+  .exec-panel {
+    background: #0a0f1a; border: 1px solid #1e293b; border-radius: 12px;
+    padding: 16px; display: flex; flex-direction: column; gap: 14px; overflow: hidden;
+  }
+
+  .exec-header {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    padding-bottom: 12px; border-bottom: 1px solid #1e293b;
+  }
+
+  .exec-agent-name { font-size: 0.9rem; font-weight: 700; color: #c4b5fd; }
+  .exec-agent-desc { font-size: 0.67rem; color: #64748b; margin-top: 3px; }
+
+  .running-badge {
+    padding: 4px 12px; border-radius: 20px; font-size: 0.67rem; font-weight: 700;
+    background: #1a1033; color: #c4b5fd; border: 1px solid #4c1d95;
+    animation: pulse-badge 1.5s ease-in-out infinite;
+  }
+
+  /* Input → Output flow */
+  .io-grid { display: grid; grid-template-columns: 1fr 40px 1fr; gap: 0; align-items: start; }
+
+  .io-section-label {
+    font-size: 0.6rem; color: #475569; font-weight: 700;
+    letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 8px;
+  }
+
+  .io-arrow {
+    display: flex; align-items: flex-start; justify-content: center;
+    padding-top: 22px; color: #4c1d95; font-size: 1.1rem;
+  }
+
+  .io-field {
+    background: #0d1117; border-radius: 7px;
+    padding: 8px 10px; margin-bottom: 5px;
+  }
+  .io-field-name { font-size: 0.62rem; color: #64748b; margin-bottom: 3px; }
+  .io-field-value { font-size: 0.72rem; color: #e2e8f0; word-break: break-all; }
+  .io-field-value.url { color: #60a5fa; }
+  .io-field-value.credential { color: #f59e0b; letter-spacing: 0.15em; }
+  .io-field-value.running-val {
+    color: #a78bfa;
+    animation: pulse-text 1.5s ease-in-out infinite;
+  }
+
+  /* Progress bar */
+  .progress-section { display: flex; flex-direction: column; gap: 6px; }
+  .progress-label { display: flex; justify-content: space-between; font-size: 0.63rem; color: #64748b; }
+  .progress-bar-track { background: #1e293b; border-radius: 20px; height: 6px; overflow: hidden; }
+  .progress-bar-fill {
+    height: 100%; border-radius: 20px;
+    background: linear-gradient(90deg, #7c3aed, #a855f7);
+    animation: progress-fill 3s ease-in-out infinite alternate;
+  }
+
+  /* ── Right col ── */
+  .right-col { display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+
+  .dag-box { background: #0a0f1a; border: 1px solid #1e293b; border-radius: 12px; padding: 12px; }
+  .dag-nodes { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-top: 8px; }
+  .dag-node { padding: 5px 16px; border-radius: 6px; font-size: 0.66rem; font-weight: 700; min-width: 120px; text-align: center; }
+  .dag-node.completed-node { background: #052e16; color: #4ade80; border: 1px solid #166534; }
+  .dag-node.running-node { background: #100a24; color: #c4b5fd; border: 1px solid #4c1d95; box-shadow: 0 0 8px rgba(124,58,237,0.25); animation: pulse-ring 1.5s infinite; }
+  .dag-node.pending-node { background: #0d1117; color: #334155; border: 1px solid #1e293b; }
+  .dag-arrow { color: #334155; font-size: 0.7rem; }
+
+  .log-box { background: #0a0f1a; border: 1px solid #1e293b; border-radius: 12px; padding: 10px 12px; overflow: hidden; }
+  .log-entries { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; font-size: 0.61rem; }
+  .log-entry { line-height: 1.5; }
+  .log-type { font-weight: 700; margin-right: 3px; }
+  .log-purple .log-type { color: #a855f7; }
+  .log-green .log-type { color: #22c55e; }
+  .log-gray .log-type { color: #475569; }
+  .log-text { color: #475569; }
+
+  .inputs-box { background: #0a0f1a; border: 1px solid #1e293b; border-radius: 12px; padding: 12px; flex-shrink: 0; }
+  .input-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 5px 8px; background: #0d1117; border-radius: 6px; margin-bottom: 5px; font-size: 0.66rem;
+  }
+  .input-name { color: #7dd3fc; }
+  .input-val { color: #94a3b8; font-size: 0.62rem; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .input-val.cred { color: #f59e0b; letter-spacing: 0.1em; }
+
+  /* Animations */
+  @keyframes pulse-purple { 0%,100%{opacity:1;box-shadow:0 0 4px rgba(168,85,247,.6)}50%{opacity:.5;box-shadow:none} }
+  @keyframes pulse-badge { 0%,100%{box-shadow:0 0 8px rgba(168,85,247,.3)}50%{box-shadow:none} }
+  @keyframes pulse-bar { 0%,100%{opacity:1}50%{opacity:.4} }
+  @keyframes pulse-ring { 0%,100%{box-shadow:0 0 10px rgba(124,58,237,.4)}50%{box-shadow:none} }
+  @keyframes pulse-text { 0%,100%{opacity:1}50%{opacity:.5} }
+  @keyframes progress-fill { 0%{width:35%}100%{width:72%} }
+
+  ::-webkit-scrollbar{width:4px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:#1e293b;border-radius:4px}
+</style>
+</head>
+<body>
+
+<!-- ── OBJECTIVE BANNER ── -->
+<div class="objective-banner">
+  <div class="objective-label">⬡ Objective</div>
+  <div class="objective-input-wrap">
+    <input
+      class="objective-input"
+      type="text"
+      value="Analyze my GitHub repository for security vulnerabilities and generate a report"
+      readonly
+    />
+  </div>
+  <button class="run-btn">▶ Run Pipeline</button>
+</div>
+
+<!-- ── STATUS BAR ── -->
+<div class="topbar">
+  <div style="display:flex;align-items:center;gap:10px">
+    <div class="mode-badge-run">▶ RUN TIME</div>
+    <div style="font-size:0.68rem;color:#475569">Executing pipeline… agent 3 of 4</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <div class="running-dot"></div>
+    <div class="stat-pill stat-total">4 agents</div>
+    <div class="stat-pill stat-done">✓ 2 done</div>
+    <div class="stat-pill stat-running">● 1 running</div>
+    <div class="stat-pill stat-total" style="color:#334155">1 waiting</div>
+  </div>
+</div>
+
+<!-- ── 3-COLUMN MAIN ── -->
+<div class="main">
+
+  <!-- COL 1: Agent list -->
+  <div class="agent-list">
+    <div class="col-header">Agents (4)</div>
+    <div class="agent-list-inner">
+
+      <div class="agent-card completed">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div class="agent-name">① Repo Fetcher</div>
+        </div>
+        <div class="agent-meta">Clones and indexes the repository structure</div>
+        <div class="agent-status-row">
+          <div class="status-tag tag-completed">✓ COMPLETED</div>
+          <div class="duration-text">1.2s</div>
+        </div>
+      </div>
+
+      <div class="agent-card completed">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div class="agent-name">② Dep Auditor</div>
+        </div>
+        <div class="agent-meta">Scans dependency manifests for CVEs</div>
+        <div class="agent-status-row">
+          <div class="status-tag tag-completed">✓ COMPLETED</div>
+          <div class="duration-text">3.8s</div>
+        </div>
+      </div>
+
+      <div class="agent-card running active">
+        <div class="agent-name">③ Vuln Scanner</div>
+        <div class="agent-meta">Deep static analysis for injection &amp; auth flaws</div>
+        <div class="agent-status-row">
+          <div class="status-tag tag-running">● RUNNING</div>
+          <div class="duration-text">12s…</div>
+        </div>
+      </div>
+
+      <div class="agent-card waiting">
+        <div class="agent-name">④ Report Writer</div>
+        <div class="agent-meta">Generates structured remediation report</div>
+        <div class="agent-status-row">
+          <div class="status-tag tag-waiting">WAITING</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- COL 2: Execution detail -->
+  <div class="exec-panel">
+
+    <div class="exec-header">
+      <div>
+        <div class="exec-agent-name">③ Vuln Scanner</div>
+        <div class="exec-agent-desc">Deep static analysis for injection &amp; auth flaws · timeout 180s · retry ×3</div>
+      </div>
+      <div class="running-badge">● RUNNING — 12s</div>
+    </div>
+
+    <!-- Progress -->
+    <div class="progress-section">
+      <div class="progress-label">
+        <span>Scanning repository…</span>
+        <span style="color:#a78bfa">~45%</span>
+      </div>
+      <div class="progress-bar-track">
+        <div class="progress-bar-fill"></div>
+      </div>
+    </div>
+
+    <!-- Input → Output -->
+    <div class="io-grid">
+      <div>
+        <div class="io-section-label">Inputs Received</div>
+        <div class="io-field">
+          <div class="io-field-name">repo_url</div>
+          <div class="io-field-value url">github.com/acme/api-service</div>
+        </div>
+        <div class="io-field">
+          <div class="io-field-name">github_token</div>
+          <div class="io-field-value credential">••••••••••••</div>
+        </div>
+        <div class="io-field">
+          <div class="io-field-name">indexed_files (from ①)</div>
+          <div class="io-field-value" style="color:#94a3b8">247 files, 18 dirs</div>
+        </div>
+        <div class="io-field">
+          <div class="io-field-name">cve_list (from ②)</div>
+          <div class="io-field-value" style="color:#f97316">4 CVEs found</div>
+        </div>
+      </div>
+
+      <div class="io-arrow">→</div>
+
+      <div>
+        <div class="io-section-label">Output (in progress)</div>
+        <div class="io-field" style="border: 1px dashed #2d1b4e">
+          <div class="io-field-name">vulnerabilities</div>
+          <div class="io-field-value running-val">scanning…</div>
+        </div>
+        <div class="io-field" style="border: 1px dashed #2d1b4e; opacity:0.5">
+          <div class="io-field-name">severity_breakdown</div>
+          <div class="io-field-value" style="color:#334155">waiting</div>
+        </div>
+        <div class="io-field" style="border: 1px dashed #2d1b4e; opacity:0.5">
+          <div class="io-field-name">remediation_hints</div>
+          <div class="io-field-value" style="color:#334155">waiting</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Already completed agent output example -->
+    <div style="background:#071a0e;border:1px solid #166534;border-radius:8px;padding:10px 12px;flex-shrink:0">
+      <div style="font-size:0.62rem;color:#4ade80;font-weight:700;margin-bottom:6px">② Dep Auditor — Output</div>
+      <div style="display:flex;gap:8px;font-size:0.68rem">
+        <div style="background:#0d2818;border-radius:6px;padding:6px 10px;flex:1">
+          <div style="color:#64748b;font-size:0.58rem;margin-bottom:2px">cve_list</div>
+          <div style="color:#f97316">CVE-2024-1234 (critical)</div>
+          <div style="color:#fbbf24">CVE-2024-5678 (high)</div>
+          <div style="color:#fbbf24">+2 more</div>
+        </div>
+        <div style="background:#0d2818;border-radius:6px;padding:6px 10px;flex:1">
+          <div style="color:#64748b;font-size:0.58rem;margin-bottom:2px">packages_scanned</div>
+          <div style="color:#86efac;font-size:1rem;font-weight:700">142</div>
+          <div style="color:#64748b;font-size:0.6rem">in 3.8s</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- COL 3: DAG + Log + Inputs -->
+  <div class="right-col">
+
+    <div class="dag-box">
+      <div class="col-header">Execution DAG</div>
+      <div class="dag-nodes">
+        <div class="dag-node completed-node">① Repo Fetcher ✓</div>
+        <div class="dag-arrow">↓</div>
+        <div class="dag-node completed-node">② Dep Auditor ✓</div>
+        <div class="dag-arrow">↓</div>
+        <div class="dag-node running-node">③ Vuln Scanner ●</div>
+        <div class="dag-arrow">↓</div>
+        <div class="dag-node pending-node">④ Report Writer</div>
+      </div>
+    </div>
+
+    <div class="log-box">
+      <div class="col-header">Run Log</div>
+      <div class="log-entries">
+        <div class="log-entry log-purple"><span class="log-type">[RUNNING]</span><span class="log-text">Vuln Scanner 12s…</span></div>
+        <div class="log-entry log-green"><span class="log-type">[DONE]</span><span class="log-text">Dep Auditor 3.8s</span></div>
+        <div class="log-entry log-green"><span class="log-type">[DONE]</span><span class="log-text">Repo Fetcher 1.2s</span></div>
+        <div class="log-entry log-gray"><span class="log-type">[RUN]</span><span class="log-text">Pipeline started</span></div>
+      </div>
+    </div>
+
+    <div class="inputs-box">
+      <div class="col-header" style="margin-bottom:8px">Your Inputs</div>
+      <div class="input-row">
+        <span class="input-name">github_token</span>
+        <span class="input-val cred">••••••••</span>
+      </div>
+      <div class="input-row">
+        <span class="input-name">repo_url</span>
+        <span class="input-val">acme/api-service</span>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+</body>
+</html>

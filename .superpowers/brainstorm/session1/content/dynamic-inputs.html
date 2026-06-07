@@ -1,0 +1,108 @@
+<h2>Dynamic inputs — only ask what's needed</h2>
+<p class="subtitle">The AI infers required inputs from the objective. Simple tasks need nothing. Complex tasks prompt exactly what's missing.</p>
+
+<div style="display:flex;flex-direction:column;gap:0.75rem">
+
+  <!-- Example 1: Hello World -->
+  <div style="background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:0.9rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.6rem">
+      <span style="background:#166534;color:#4ade80;padding:2px 10px;border-radius:10px;font-size:0.7rem">SIMPLE</span>
+      <span style="color:#e2e8f0;font-size:0.85rem;font-weight:bold">"Create a hello world program"</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:1rem">
+      <div style="background:#0a2010;border:1px solid #166534;border-radius:4px;padding:0.5rem;flex:1;font-size:0.75rem;color:#94a3b8">
+        <span style="color:#4ade80">✓ No permissions required</span><br>
+        <span style="color:#4ade80">✓ No extra inputs needed</span>
+      </div>
+      <div style="font-size:1.2rem">→</div>
+      <div style="background:#6d28d9;color:white;padding:6px 20px;border-radius:5px;font-size:0.8rem;font-weight:bold;white-space:nowrap">▶ Run immediately</div>
+    </div>
+  </div>
+
+  <!-- Example 2: GitHub analysis -->
+  <div style="background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:0.9rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.6rem">
+      <span style="background:#7c2d12;color:#fb923c;padding:2px 10px;border-radius:10px;font-size:0.7rem">NEEDS INPUTS</span>
+      <span style="color:#e2e8f0;font-size:0.85rem;font-weight:bold">"Analyze my GitHub repo for security issues"</span>
+    </div>
+    <div style="background:#0f172a;border:1px solid #334155;border-radius:6px;padding:0.7rem;font-size:0.75rem">
+      <div style="color:#64748b;font-size:0.68rem;margin-bottom:0.5rem">🤖 AgentMaster detected these are needed:</div>
+      <div style="display:flex;flex-direction:column;gap:0.4rem">
+        <div style="display:flex;align-items:center;gap:0.5rem">
+          <span style="color:#fb923c;width:16px">*</span>
+          <span style="color:#94a3b8;width:110px">GitHub Repo URL</span>
+          <div style="flex:1;background:#1e293b;border:1px solid #f97316;border-radius:3px;padding:3px 8px;color:#e2e8f0">https://github.com/org/repo</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:0.5rem">
+          <span style="color:#fb923c;width:16px">*</span>
+          <span style="color:#94a3b8;width:110px">GitHub Token</span>
+          <div style="flex:1;background:#1e293b;border:1px solid #f97316;border-radius:3px;padding:3px 8px;color:#64748b">ghp_••••••••••••••</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:0.5rem">
+          <span style="color:#475569;width:16px">○</span>
+          <span style="color:#94a3b8;width:110px">Branch</span>
+          <div style="flex:1;background:#1e293b;border:1px solid #334155;border-radius:3px;padding:3px 8px;color:#64748b">main (default)</div>
+        </div>
+      </div>
+      <div style="margin-top:0.6rem;text-align:right">
+        <span style="background:#6d28d9;color:white;padding:4px 16px;border-radius:4px;font-size:0.75rem">▶ Run with these inputs</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Example 3: Spacecraft -->
+  <div style="background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:0.9rem">
+    <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.6rem">
+      <span style="background:#1e3a5f;color:#60a5fa;padding:2px 10px;border-radius:10px;font-size:0.7rem">COMPLEX</span>
+      <span style="color:#e2e8f0;font-size:0.85rem;font-weight:bold">"Design a Mars sample return spacecraft"</span>
+    </div>
+    <div style="background:#0f172a;border:1px solid #334155;border-radius:6px;padding:0.7rem;font-size:0.75rem">
+      <div style="color:#64748b;font-size:0.68rem;margin-bottom:0.5rem">🤖 AgentMaster detected these are needed:</div>
+      <div style="display:flex;flex-direction:column;gap:0.4rem">
+        <div style="display:flex;align-items:center;gap:0.5rem">
+          <span style="color:#fb923c;width:16px">*</span>
+          <span style="color:#94a3b8;width:130px">Mission type</span>
+          <div style="flex:1;background:#1e293b;border:1px solid #f97316;border-radius:3px;padding:3px 8px;color:#e2e8f0">Sample return ▾</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:0.5rem">
+          <span style="color:#fb923c;width:16px">*</span>
+          <span style="color:#94a3b8;width:130px">Launch window</span>
+          <div style="flex:1;background:#1e293b;border:1px solid #f97316;border-radius:3px;padding:3px 8px;color:#e2e8f0">2028</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:0.5rem">
+          <span style="color:#475569;width:16px">○</span>
+          <span style="color:#94a3b8;width:130px">NASA API key</span>
+          <div style="flex:1;background:#1e293b;border:1px solid #334155;border-radius:3px;padding:3px 8px;color:#64748b">optional — skip for offline mode</div>
+        </div>
+      </div>
+      <div style="margin-top:0.6rem;text-align:right">
+        <span style="background:#6d28d9;color:white;padding:4px 16px;border-radius:4px;font-size:0.75rem">▶ Run with these inputs</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div style="margin-top:1rem;background:#1e293b;border-radius:6px;padding:0.85rem">
+  <div style="color:#f1f5f9;font-size:0.82rem;margin-bottom:0.4rem"><strong>How this works under the hood:</strong></div>
+  <div style="display:flex;flex-direction:column;gap:0.3rem;font-size:0.78rem;color:#94a3b8">
+    <div>1. <span style="color:#22d3ee">Design Time</span> — AI reads the objective and generates an input schema (required + optional fields, permission types)</div>
+    <div>2. <span style="color:#a855f7">Run Time</span> — UI renders only the fields that are required or that the user hasn't skipped</div>
+    <div>3. Required fields block the Run button. Optional fields default to sensible values or can be skipped.</div>
+    <div>4. Tokens/keys are <strong>never saved</strong> — used for the session only, cleared on close.</div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:1rem">
+  <p class="label">Does this capture what you had in mind?</p>
+  <div class="options">
+    <div class="option" data-choice="yes" onclick="toggleSelect(this)">
+      <div class="letter">✓</div>
+      <div class="content"><h3>Yes — that's it</h3><p>Move on to the overall architecture design.</p></div>
+    </div>
+    <div class="option" data-choice="more" onclick="toggleSelect(this)">
+      <div class="letter">+</div>
+      <div class="content"><h3>Yes, but I want to add something</h3><p>I'll describe it in the terminal.</p></div>
+    </div>
+  </div>
+</div>

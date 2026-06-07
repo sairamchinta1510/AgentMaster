@@ -5,6 +5,7 @@ from app.config import settings
 from app.prompts.master import get_master_prompt
 from app.models.dag import DAGGraph, DAGNode, DAGEdge
 from app.models.session import ExecutionSession
+from app.agents.llm_utils import stream_llm_json
 
 logger = logging.getLogger(__name__)
 
@@ -18,40 +19,34 @@ class AgentMasterAgent:
     def __init__(self, api_key: str | None = None, model: str | None = None):
         self.client, self.model = make_llm_client()
 
-    async def design_blueprint(self, session: ExecutionSession, library_context: str = "") -> dict:
+    async def design_blueprint(self, session: ExecutionSession, library_context: str = "", on_event=None) -> dict:
         """Parse objective and return full agent blueprint as dict."""
         prompt = get_master_prompt("DESIGN", session.objective, library_context)
-        response = await self.client.chat.completions.create(
-            model=self.model,
+        content = await stream_llm_json(
+            self.client, self.model,
             messages=[
                 {"role": "system", "content": prompt},
-                {
-                    "role": "user",
-                    "content": f"Design the complete agent blueprint for this objective: {session.objective}",
-                },
+                {"role": "user", "content": f"Design the complete agent blueprint for this objective: {session.objective}"},
             ],
-            response_format={"type": "json_object"},
             temperature=0.2,
+            on_event=on_event,
+            context="Designing pipeline architecture",
         )
-        content = response.choices[0].message.content
         return json.loads(content)
 
-    async def design_blueprint_raw(self, objective: str) -> dict:
+    async def design_blueprint_raw(self, objective: str, on_event=None) -> dict:
         """Design blueprint from objective string directly."""
         prompt = get_master_prompt("DESIGN", objective)
-        response = await self.client.chat.completions.create(
-            model=self.model,
+        content = await stream_llm_json(
+            self.client, self.model,
             messages=[
                 {"role": "system", "content": prompt},
-                {
-                    "role": "user",
-                    "content": f"Design the complete agent blueprint for this objective: {objective}",
-                },
+                {"role": "user", "content": f"Design the complete agent blueprint for this objective: {objective}"},
             ],
-            response_format={"type": "json_object"},
             temperature=0.2,
+            on_event=on_event,
+            context="Designing pipeline architecture",
         )
-        content = response.choices[0].message.content
         return json.loads(content)
 
     def build_dag_from_blueprint(self, blueprint: dict, session_id: str) -> DAGGraph:

@@ -4,6 +4,7 @@ from openai import AsyncOpenAI
 from app.config import settings
 from app.prompts.critique import get_critique_prompt
 from app.models.agent import AtomicAgent, CritiqueResult, CritiqueVerdict, CritiqueIssue
+from app.agents.llm_utils import stream_llm_json
 
 logger = logging.getLogger(__name__)
 
@@ -30,24 +31,23 @@ class AgentCritiqueAgent:
         phase: str,
         iteration: int,
         previous_issues: list | None = None,
+        on_event=None,
     ) -> dict:
         prompt = get_critique_prompt(
             agent.model_dump(exclude={"critique_history"}), phase, iteration, previous_issues
         )
         assert self.client is not None
-        response = await self.client.chat.completions.create(
-            model=self.model,
+        content = await stream_llm_json(
+            self.client, self.model,
             messages=[
                 {"role": "system", "content": prompt},
-                {
-                    "role": "user",
-                    "content": f"Critique agent {agent.agent_name} — iteration {iteration} of 5",
-                },
+                {"role": "user", "content": f"Critique agent {agent.agent_name} — iteration {iteration} of 5"},
             ],
-            response_format={"type": "json_object"},
             temperature=0.1,
+            on_event=on_event,
+            context=f"Critiquing {agent.agent_name} (round {iteration})",
         )
-        return json.loads(response.choices[0].message.content)
+        return json.loads(content)
 
     async def critique(
         self,
@@ -55,8 +55,9 @@ class AgentCritiqueAgent:
         phase: str,
         iteration: int,
         previous_issues: list | None = None,
+        on_event=None,
     ) -> CritiqueResult:
-        data = await self._call_llm(agent, phase, iteration, previous_issues)
+        data = await self._call_llm(agent, phase, iteration, previous_issues, on_event=on_event)
         issues = [CritiqueIssue(**i) for i in data.get("issues", [])]
         return CritiqueResult(
             critique_id=data.get(
@@ -102,7 +103,7 @@ async def run_critique_loop(
                 "message": f"Critique round {iteration}/5 — calling LLM to review {agent.agent_name}…",
             })
         result = await critique_agent.critique(
-            agent, phase, iteration, previous_issues or None
+            agent, phase, iteration, previous_issues or None, on_event=on_event
         )
         agent.critique_iterations = iteration
         agent.critique_history.append(result)
@@ -124,7 +125,7 @@ async def run_critique_loop(
                     "phase": "REVISING_SPEC",
                     "message": f"Auto-fixing {len(result.issues)} issue(s) in {agent.agent_name} — calling LLM…",
                 })
-            agent = await producer_agent.revise(agent, previous_issues, phase)
+            agent = await producer_agent.revise(agent, previous_issues, phase, on_event=on_event)
 
     # After max_iterations — escalate: errors must NEVER pass forward
     assert final_result is not None

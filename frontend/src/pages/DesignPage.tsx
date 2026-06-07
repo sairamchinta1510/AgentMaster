@@ -38,7 +38,7 @@ export function DesignPage() {
   const { pipelineId } = useParams<{ pipelineId: string }>();
   const navigate = useNavigate();
   const { activePipeline, setActivePipeline, upsertSummary } = usePipelineStore();
-  const { isConnected, events, agents, dag, isComplete, phase, phaseMessage } = useDesignStore();
+  const { isConnected, events, agents, dag, isComplete, phase, phaseMessage, llmTokens } = useDesignStore();
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [designTrigger, setDesignTrigger] = useState(0);
 
@@ -149,6 +149,11 @@ export function DesignPage() {
             <span className="text-cyan-300 text-xs font-mono truncate">
               {phaseMessage || "AI is working…"}
             </span>
+            {llmTokens > 0 && (
+              <span className="text-gray-500 text-xs font-mono shrink-0">
+                · <span className="text-amber-400">{llmTokens.toLocaleString()}</span> tokens
+              </span>
+            )}
             <ThinkingDots />
             <button
               className="ml-auto shrink-0 flex items-center gap-1.5 bg-red-900/50 hover:bg-red-800 text-red-300 border border-red-700/60 text-xs font-bold px-3 py-1 rounded-lg font-mono transition-colors"

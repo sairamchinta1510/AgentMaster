@@ -1,0 +1,190 @@
+<h2>Design Time — which layout feels right?</h2>
+<p class="subtitle">You want to clearly see: agent count, per-agent critique (up to 5 iterations), iterative fixes, and a Save button. Here are two approaches.</p>
+
+<div class="split" style="gap:1.5rem;align-items:flex-start">
+
+  <!-- Option A: Vertical timeline -->
+  <div class="card" data-choice="A" onclick="toggleSelect(this)" style="flex:1">
+    <div class="card-body">
+      <h3 style="color:#22d3ee">A — Vertical Timeline</h3>
+      <p style="font-size:0.78rem;color:#aaa;margin-bottom:0.75rem">Agents appear top-to-bottom as they're produced. Each agent card expands to show its critique rounds inline. Log on the right.</p>
+    </div>
+    <div class="card-image" style="padding:0.75rem;background:#0f172a;border-radius:6px;font-family:monospace;font-size:0.68rem">
+
+      <!-- Header bar -->
+      <div style="display:flex;justify-content:space-between;align-items:center;background:#1e293b;padding:6px 10px;border-radius:4px;margin-bottom:8px">
+        <span style="color:#22d3ee;font-weight:bold">✏️ Design: Analyze GitHub Repo</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span style="background:#164e63;color:#67e8f9;padding:2px 8px;border-radius:10px;font-size:0.65rem">4 agents</span>
+          <span style="background:#166534;color:#86efac;padding:2px 8px;border-radius:10px;font-size:0.65rem">3 approved</span>
+          <span style="background:#0f172a;border:1px solid #22d3ee;color:#22d3ee;padding:2px 8px;border-radius:4px;font-size:0.65rem">💾 Save Plan</span>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px">
+        <!-- Left: agent cards -->
+        <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+
+          <!-- Agent 1 — approved -->
+          <div style="background:#1e293b;border:1px solid #166534;border-radius:4px;padding:6px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span style="color:#86efac;font-weight:bold">① Repo Fetcher</span>
+              <span style="background:#166534;color:#86efac;padding:1px 6px;border-radius:10px;font-size:0.6rem">✓ APPROVED</span>
+            </div>
+            <div style="color:#64748b;font-size:0.62rem;margin-top:3px">Critique: 2/5 rounds • ★ 9.2</div>
+            <!-- Critique rounds mini-dots -->
+            <div style="display:flex;gap:3px;margin-top:4px">
+              <div style="width:10px;height:10px;border-radius:50%;background:#f59e0b" title="Round 1: NEEDS_REVISION"></div>
+              <div style="width:10px;height:10px;border-radius:50%;background:#22c55e" title="Round 2: APPROVED"></div>
+              <div style="width:10px;height:10px;border-radius:50%;background:#1e293b;border:1px solid #334155"></div>
+              <div style="width:10px;height:10px;border-radius:50%;background:#1e293b;border:1px solid #334155"></div>
+              <div style="width:10px;height:10px;border-radius:50%;background:#1e293b;border:1px solid #334155"></div>
+            </div>
+          </div>
+
+          <!-- Agent 2 — currently in critique round 3 -->
+          <div style="background:#1e293b;border:1px solid #b45309;border-radius:4px;padding:6px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span style="color:#fbbf24;font-weight:bold">② Vuln Scanner</span>
+              <span style="background:#78350f;color:#fde68a;padding:1px 6px;border-radius:10px;font-size:0.6rem;animation:pulse 1s infinite">● CRITIQUE 3/5</span>
+            </div>
+            <div style="color:#64748b;font-size:0.62rem;margin-top:3px">2 issues remaining: input_schema incomplete, timeout too low</div>
+            <div style="display:flex;gap:3px;margin-top:4px">
+              <div style="width:10px;height:10px;border-radius:50%;background:#ef4444" title="Round 1: critical issue"></div>
+              <div style="width:10px;height:10px;border-radius:50%;background:#f59e0b" title="Round 2: revised, still issues"></div>
+              <div style="width:10px;height:10px;border-radius:50%;background:#f59e0b;animation:pulse 1s infinite" title="Round 3: in progress"></div>
+              <div style="width:10px;height:10px;border-radius:50%;background:#1e293b;border:1px solid #334155"></div>
+              <div style="width:10px;height:10px;border-radius:50%;background:#1e293b;border:1px solid #334155"></div>
+            </div>
+          </div>
+
+          <!-- Agent 3 — pending -->
+          <div style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:6px;opacity:0.5">
+            <div style="display:flex;justify-content:space-between">
+              <span style="color:#94a3b8;font-weight:bold">③ Report Writer</span>
+              <span style="color:#475569;font-size:0.6rem">waiting...</span>
+            </div>
+          </div>
+
+          <!-- Agent 4 — pending -->
+          <div style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:6px;opacity:0.5">
+            <div style="display:flex;justify-content:space-between">
+              <span style="color:#94a3b8;font-weight:bold">④ Notifier</span>
+              <span style="color:#475569;font-size:0.6rem">waiting...</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: live log -->
+        <div style="width:130px;background:#0f172a;border-radius:4px;padding:6px;font-size:0.6rem;overflow:hidden">
+          <div style="color:#475569;margin-bottom:4px">LIVE LOG</div>
+          <div style="color:#a855f7">[CRITIQUE_3] Vuln Scanner</div>
+          <div style="color:#64748b">input_schema missing url field</div>
+          <div style="color:#fbbf24">[REVISING] fixing...</div>
+          <div style="color:#64748b">[APPROVED] Repo Fetcher ★9.2</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Option B: 3-column dashboard -->
+  <div class="card" data-choice="B" onclick="toggleSelect(this)" style="flex:1">
+    <div class="card-body">
+      <h3 style="color:#a855f7">B — 3-Column Dashboard</h3>
+      <p style="font-size:0.78rem;color:#aaa;margin-bottom:0.75rem">Left = agent list with status, Center = expanded critique detail for selected agent, Right = DAG + event log.</p>
+    </div>
+    <div class="card-image" style="padding:0.75rem;background:#0f172a;border-radius:6px;font-family:monospace;font-size:0.68rem">
+
+      <!-- Header bar -->
+      <div style="display:flex;justify-content:space-between;align-items:center;background:#1e293b;padding:6px 10px;border-radius:4px;margin-bottom:8px">
+        <span style="color:#a855f7;font-weight:bold">✏️ Analyze GitHub Repo</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span style="color:#94a3b8;font-size:0.65rem">4 agents · 3 approved · 1 critiquing</span>
+          <span style="background:#4c1d95;color:#c4b5fd;padding:2px 8px;border-radius:4px;font-size:0.65rem">💾 Save Plan</span>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:6px;height:190px">
+
+        <!-- Col 1: agent list -->
+        <div style="width:100px;display:flex;flex-direction:column;gap:4px">
+          <div style="color:#475569;font-size:0.6rem;margin-bottom:2px">AGENTS (4)</div>
+          <div style="background:#166534;border-radius:3px;padding:4px 5px">
+            <div style="color:#86efac;font-size:0.65rem">① Repo Fetcher</div>
+            <div style="color:#4ade80;font-size:0.58rem">✓ approved ★9.2</div>
+          </div>
+          <div style="background:#78350f;border-radius:3px;padding:4px 5px;border:1px solid #b45309">
+            <div style="color:#fbbf24;font-size:0.65rem">② Vuln Scanner</div>
+            <div style="color:#f59e0b;font-size:0.58rem">● critique 3/5</div>
+          </div>
+          <div style="background:#1e293b;border-radius:3px;padding:4px 5px;opacity:0.5">
+            <div style="color:#94a3b8;font-size:0.65rem">③ Report Writer</div>
+            <div style="color:#475569;font-size:0.58rem">waiting</div>
+          </div>
+          <div style="background:#1e293b;border-radius:3px;padding:4px 5px;opacity:0.5">
+            <div style="color:#94a3b8;font-size:0.65rem">④ Notifier</div>
+            <div style="color:#475569;font-size:0.58rem">waiting</div>
+          </div>
+        </div>
+
+        <!-- Col 2: critique detail (for selected agent) -->
+        <div style="flex:1;background:#1e293b;border-radius:4px;padding:6px;overflow:hidden">
+          <div style="color:#fbbf24;font-weight:bold;margin-bottom:4px;font-size:0.65rem">② Vuln Scanner — Critique Detail</div>
+          <!-- 5 round tracker -->
+          <div style="display:flex;gap:4px;margin-bottom:6px;align-items:center">
+            <span style="color:#64748b;font-size:0.6rem">Rounds:</span>
+            <div style="width:18px;height:18px;border-radius:50%;background:#ef4444;display:flex;align-items:center;justify-content:center;color:white;font-size:0.55rem;font-weight:bold">1</div>
+            <div style="width:18px;height:18px;border-radius:50%;background:#f59e0b;display:flex;align-items:center;justify-content:center;color:white;font-size:0.55rem;font-weight:bold">2</div>
+            <div style="width:18px;height:18px;border-radius:50%;background:#b45309;border:2px solid #fbbf24;display:flex;align-items:center;justify-content:center;color:white;font-size:0.55rem;font-weight:bold">3</div>
+            <div style="width:18px;height:18px;border-radius:50%;background:#1e293b;border:1px solid #334155;display:flex;align-items:center;justify-content:center;color:#475569;font-size:0.55rem">4</div>
+            <div style="width:18px;height:18px;border-radius:50%;background:#1e293b;border:1px solid #334155;display:flex;align-items:center;justify-content:center;color:#475569;font-size:0.55rem">5</div>
+          </div>
+          <!-- Current round issues -->
+          <div style="font-size:0.6rem;display:flex;flex-direction:column;gap:3px">
+            <div style="background:#0f172a;border-left:2px solid #ef4444;padding:3px 5px;border-radius:0 3px 3px 0">
+              <div style="color:#f87171">✗ input_schema missing url field</div>
+              <div style="color:#475569">severity: major · auto-fixing...</div>
+            </div>
+            <div style="background:#0f172a;border-left:2px solid #f59e0b;padding:3px 5px;border-radius:0 3px 3px 0">
+              <div style="color:#fbbf24">⚠ timeout_seconds too low (30s)</div>
+              <div style="color:#475569">severity: minor · recommended: 120s</div>
+            </div>
+            <div style="background:#0f172a;border-left:2px solid #22c55e;padding:3px 5px;border-radius:0 3px 3px 0">
+              <div style="color:#86efac">✓ output_schema complete</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Col 3: DAG mini + log -->
+        <div style="width:100px;display:flex;flex-direction:column;gap:4px">
+          <div style="background:#1e293b;border-radius:4px;padding:5px;flex:1">
+            <div style="color:#475569;font-size:0.58rem;margin-bottom:4px">DAG</div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+              <div style="background:#166534;color:#86efac;padding:2px 8px;border-radius:2px;font-size:0.6rem">Fetch</div>
+              <div style="color:#475569;font-size:0.6rem">↓</div>
+              <div style="background:#78350f;color:#fbbf24;padding:2px 8px;border-radius:2px;font-size:0.6rem">Scan</div>
+              <div style="color:#475569;font-size:0.6rem">↓</div>
+              <div style="background:#1e293b;color:#475569;padding:2px 8px;border-radius:2px;font-size:0.6rem;border:1px dashed #334155">Report</div>
+            </div>
+          </div>
+          <div style="background:#0f172a;border-radius:4px;padding:5px;height:60px;overflow:hidden">
+            <div style="color:#475569;font-size:0.58rem;margin-bottom:2px">LOG</div>
+            <div style="color:#a855f7;font-size:0.58rem">[CRITIQUE_3]</div>
+            <div style="color:#64748b;font-size:0.55rem">Vuln Scanner...</div>
+            <div style="color:#fbbf24;font-size:0.58rem">[REVISING]</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="section" style="margin-top:1rem;background:#1e293b;border-radius:6px;padding:0.75rem">
+  <p style="color:#94a3b8;font-size:0.82rem;margin:0">
+    <strong style="color:#f1f5f9">Key features in both:</strong>
+    Agent count badge at the top · 5-dot critique round tracker per agent · Issue details with severity · Auto-fix indicator · DAG updates as agents approve · 💾 Save Plan button (enabled when all agents are done).
+    <br><br>
+    <strong style="color:#22d3ee">My recommendation: B.</strong> The 3-column layout lets you see the full critique detail for the active agent without losing sight of the overall agent list — which is exactly what you asked for.
+  </p>
+</div>

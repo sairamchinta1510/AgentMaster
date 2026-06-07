@@ -1,0 +1,70 @@
+<h2>What should AgentMaster feel like?</h2>
+<p class="subtitle">The core question before we redesign anything</p>
+
+<div class="section">
+  <p class="label">Current problem</p>
+  <p style="color:#aaa;font-size:0.9rem">Right now everything happens in one messy flow — you type an objective, LLM agents start designing <em>and</em> running at the same time, and there's no way to save or reuse anything. It feels like a black box.</p>
+</div>
+
+<div class="section">
+  <p class="label">What you described — two distinct modes</p>
+</div>
+
+<div class="split" style="gap:1.5rem">
+  <div class="mockup" style="border-color:#06b6d4">
+    <div class="mockup-header" style="background:#0e7490;color:white">🎨 DESIGN TIME</div>
+    <div class="mockup-body" style="font-size:0.85rem;color:#ccc">
+      <p><strong style="color:#22d3ee">Goal:</strong> Build a reusable agent pipeline for a <em>class of problems</em></p>
+      <br>
+      <p>→ Describe what kind of work you want (e.g. "code review", "space mission planning")</p>
+      <p>→ AI designs the agents, their roles, how they connect</p>
+      <p>→ You review, tweak, approve each agent</p>
+      <p>→ The pipeline is <strong style="color:#22d3ee">saved to a Library</strong></p>
+      <br>
+      <p style="color:#67e8f9">Think: building a tool, not using it</p>
+    </div>
+  </div>
+
+  <div class="mockup" style="border-color:#a855f7">
+    <div class="mockup-header" style="background:#7e22ce;color:white">⚡ RUN TIME</div>
+    <div class="mockup-body" style="font-size:0.85rem;color:#ccc">
+      <p><strong style="color:#d8b4fe">Goal:</strong> Pick a saved pipeline and run it on a <em>specific task</em></p>
+      <br>
+      <p>→ Browse your Library of saved pipelines</p>
+      <p>→ Load one (e.g. "space mission planner")</p>
+      <p>→ Provide the specific input ("Plan a Mars sample return mission")</p>
+      <p>→ Watch agents execute, stream results live</p>
+      <br>
+      <p style="color:#c084fc">Think: using the tool you built</p>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:1.5rem">
+  <p class="label">First question</p>
+  <p style="color:#aaa;font-size:0.9rem">Which of these best describes how you picture switching between the two modes?</p>
+</div>
+
+<div class="options" style="margin-top:0.75rem">
+  <div class="option" data-choice="tabs" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Tab switcher at the top</h3>
+      <p>One app, two tabs — "Design" and "Run". Always visible, easy to switch.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="separate-pages" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Separate screens / landing page</h3>
+      <p>Home screen asks: "Design a new pipeline" or "Run an existing one". Each leads to its own full-screen experience.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="sidebar" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Sidebar + main panel</h3>
+      <p>Left sidebar lists your saved pipelines. Click one to either edit (Design) or run (Run). Mode determined by context.</p>
+    </div>
+  </div>
+</div>

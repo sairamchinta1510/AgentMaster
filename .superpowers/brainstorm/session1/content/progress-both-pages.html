@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>AgentMaster — Progress Design</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    background: #030712; color: #e2e8f0;
+    min-height: 100vh; padding: 20px; overflow-y: auto;
+  }
+
+  h2 { color: #f1f5f9; font-size: 1rem; margin-bottom: 4px; }
+  .subtitle { color: #475569; font-size: 0.78rem; margin-bottom: 20px; }
+
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+  .page-mock {
+    border: 1px solid #1e293b; border-radius: 12px; overflow: hidden;
+    background: #030712; display: flex; flex-direction: column;
+  }
+
+  /* ── Objective banner ── */
+  .obj-banner {
+    padding: 10px 14px; display: flex; align-items: center; gap: 8px;
+    flex-shrink: 0; border-bottom: 1px solid #1e293b;
+  }
+  .obj-banner.design-banner { background: #0d1b2e; border-color: #1e3a5f; }
+  .obj-banner.run-banner { background: #120a24; border-color: #2d1b4e; }
+  .obj-label-design { font-size: 0.6rem; color: #3b82f6; font-weight: 700; letter-spacing: 0.1em; white-space: nowrap; }
+  .obj-label-run { font-size: 0.6rem; color: #a855f7; font-weight: 700; letter-spacing: 0.1em; white-space: nowrap; }
+  .obj-text { flex: 1; font-size: 0.7rem; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .obj-btn-design {
+    background: linear-gradient(135deg, #0284c7, #0369a1);
+    color: white; border: none; padding: 5px 12px; border-radius: 6px;
+    font-size: 0.65rem; font-weight: 700; white-space: nowrap; font-family: inherit;
+    box-shadow: 0 0 10px rgba(2,132,199,.3);
+  }
+  .obj-btn-run {
+    background: linear-gradient(135deg, #7c3aed, #6d28d9);
+    color: white; border: none; padding: 5px 12px; border-radius: 6px;
+    font-size: 0.65rem; font-weight: 700; white-space: nowrap; font-family: inherit;
+    box-shadow: 0 0 10px rgba(124,58,237,.4);
+  }
+
+  /* ── Progress strip ── THE KEY ADDITION ── */
+  .progress-strip {
+    padding: 10px 14px; flex-shrink: 0; border-bottom: 1px solid #1e293b;
+  }
+  .progress-strip.design-strip { background: #070d18; }
+  .progress-strip.run-strip { background: #08040f; }
+
+  .progress-top-row {
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;
+  }
+  .progress-narration {
+    font-size: 0.67rem; display: flex; align-items: center; gap: 6px;
+  }
+  .narration-dot {
+    width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+    animation: pulse-dot 1s ease-in-out infinite;
+  }
+  .design-narration-dot { background: #f59e0b; }
+  .run-narration-dot { background: #a855f7; }
+  .narration-text { color: #e2e8f0; }
+  .narration-sub { color: #475569; font-size: 0.62rem; }
+
+  .progress-pct { font-size: 0.68rem; font-weight: 700; }
+  .design-pct { color: #f59e0b; }
+  .run-pct { color: #a855f7; }
+
+  .progress-bar-track {
+    height: 5px; background: #1e293b; border-radius: 20px; overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%; border-radius: 20px;
+  }
+  .design-bar { background: linear-gradient(90deg, #0284c7, #f59e0b); width: 55%; }
+  .run-bar {
+    background: linear-gradient(90deg, #7c3aed, #a855f7); width: 62%;
+    animation: run-progress 2s ease-in-out infinite alternate;
+  }
+
+  /* Step pills row */
+  .step-pills {
+    display: flex; gap: 4px; margin-top: 7px; overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .step-pills::-webkit-scrollbar { display: none; }
+  .step-pill {
+    display: flex; align-items: center; gap: 4px;
+    padding: 3px 8px; border-radius: 20px; font-size: 0.6rem; font-weight: 600;
+    white-space: nowrap; flex-shrink: 0;
+  }
+  .pill-done { background: #052e16; color: #4ade80; }
+  .pill-active-design { background: #2d1b00; color: #fbbf24; animation: pulse-badge 1.3s infinite; }
+  .pill-active-run { background: #1a1033; color: #c4b5fd; animation: pulse-badge-purple 1.3s infinite; }
+  .pill-pending { background: #0d1117; color: #334155; border: 1px solid #1e293b; }
+  .pill-dot { width: 5px; height: 5px; border-radius: 50%; }
+
+  /* ── Status bar ── */
+  .status-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 14px; background: #0f172a; border-bottom: 1px solid #1e293b; flex-shrink: 0;
+  }
+  .mode-design { background: linear-gradient(135deg,#0e7490,#0284c7); color:white; padding:2px 8px; border-radius:20px; font-size:0.62rem; font-weight:700; }
+  .mode-run { background: linear-gradient(135deg,#7c3aed,#6d28d9); color:white; padding:2px 8px; border-radius:20px; font-size:0.62rem; font-weight:700; }
+  .stat-pills { display: flex; gap: 5px; }
+  .sp { padding: 2px 8px; border-radius: 20px; font-size: 0.6rem; font-weight: 600; }
+  .sp-total { background:#1e293b; color:#94a3b8; }
+  .sp-green { background:#052e16; color:#4ade80; }
+  .sp-yellow { background:#2d1b00; color:#fbbf24; }
+  .sp-purple { background:#1a1033; color:#c4b5fd; animation: pulse-badge-purple 1.3s infinite; }
+  .sp-save { background:linear-gradient(135deg,#7c3aed,#6d28d9); color:white; box-shadow:0 0 8px rgba(124,58,237,.3); }
+
+  /* ── 3-column body ── */
+  .col-body {
+    display: grid; grid-template-columns: 140px 1fr 110px;
+    gap: 8px; padding: 8px; flex: 1; overflow: hidden; min-height: 0;
+  }
+
+  .col-header { font-size: 0.56rem; color: #475569; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 5px; }
+
+  /* agent cards */
+  .agent-col { display: flex; flex-direction: column; overflow: hidden; }
+  .ac-inner { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+  .ac { border-radius: 7px; padding: 7px 9px; border: 1px solid transparent; position: relative; overflow: hidden; }
+  .ac::before { content:''; position:absolute; left:0; top:0; bottom:0; width:2px; border-radius:2px 0 0 2px; }
+  .ac.done { background:#071a0e; border-color:#166534; }
+  .ac.done::before { background:#22c55e; }
+  .ac.critiquing { background:#180e00; border-color:#92400e; }
+  .ac.critiquing::before { background:linear-gradient(180deg,#f59e0b,#ef4444); animation:pulse-bar 1.5s infinite; }
+  .ac.running-ag { background:#100a24; border-color:#4c1d95; }
+  .ac.running-ag::before { background:linear-gradient(180deg,#a855f7,#7c3aed); animation:pulse-bar 1.5s infinite; }
+  .ac.waiting { background:#0d1117; border-color:#1e293b; opacity:.5; }
+  .ac-name { font-weight:700; font-size:0.68rem; margin-bottom:2px; }
+  .ac.done .ac-name { color:#86efac; }
+  .ac.critiquing .ac-name { color:#fde68a; }
+  .ac.running-ag .ac-name { color:#c4b5fd; }
+  .ac.waiting .ac-name { color:#64748b; }
+  .ac-status { font-size:0.58rem; }
+  .ac.done .ac-status { color:#4ade80; }
+  .ac.critiquing .ac-status { color:#fbbf24; animation:pulse-badge 1.2s infinite; }
+  .ac.running-ag .ac-status { color:#a78bfa; animation:pulse-badge-purple 1.2s infinite; }
+  .ac.waiting .ac-status { color:#334155; }
+  .dots { display:flex; gap:3px; margin-top:4px; }
+  .d { width:8px; height:8px; border-radius:50%; }
+  .d-g { background:#22c55e; box-shadow:0 0 4px rgba(34,197,94,.4); }
+  .d-r { background:#ef4444; }
+  .d-y { background:#f59e0b; }
+  .d-a { background:#f59e0b; animation:pulse-dot 1s infinite; }
+  .d-p { background:#a855f7; animation:pulse-dot-p 1s infinite; }
+  .d-e { background:#1e293b; border:1px solid #334155; }
+
+  /* center panel */
+  .center-panel {
+    background:#0a0f1a; border:1px solid #1e293b; border-radius:9px;
+    padding:10px; display:flex; flex-direction:column; gap:8px; overflow:hidden;
+  }
+  .cp-agent-name { font-size:0.78rem; font-weight:700; margin-bottom:1px; }
+  .cp-desc { font-size:0.6rem; color:#475569; }
+  .cp-badge { padding:3px 9px; border-radius:20px; font-size:0.6rem; font-weight:700; white-space:nowrap; }
+  .cp-badge-critique { background:#2d1b00; color:#fbbf24; border:1px solid #92400e; animation:pulse-badge 1.5s infinite; }
+  .cp-badge-run { background:#1a1033; color:#c4b5fd; border:1px solid #4c1d95; animation:pulse-badge-purple 1.5s infinite; }
+
+  /* round tracker */
+  .rt { display:flex; align-items:center; gap:0; }
+  .rn { display:flex; flex-direction:column; align-items:center; gap:3px; flex:1; position:relative; }
+  .rn:not(:last-child)::after { content:''; position:absolute; top:11px; left:50%; width:100%; height:1px; background:#1e293b; z-index:0; }
+  .rn.rn-warn:not(:last-child)::after { background:#f59e0b; }
+  .rn.rn-done:not(:last-child)::after { background:#22c55e; }
+  .rc { width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.6rem; font-weight:800; position:relative; z-index:1; }
+  .rc-fail { background:#2d0a0a; border:2px solid #ef4444; color:#f87171; }
+  .rc-warn { background:#2d1b00; border:2px solid #f59e0b; color:#fbbf24; }
+  .rc-active { background:#2d1b00; border:2px solid #f59e0b; color:#fbbf24; box-shadow:0 0 10px rgba(245,158,11,.5); animation:pulse-ring 1.5s infinite; }
+  .rc-empty { background:#0d1117; border:2px solid #1e293b; color:#334155; }
+  .rc-pass { background:#052e16; border:2px solid #22c55e; color:#4ade80; }
+  .rl { font-size:0.52rem; color:#475569; text-align:center; }
+  .rl-active { color:#fbbf24; }
+
+  /* issues */
+  .issue { border-radius:6px; padding:7px 9px; border-left:2px solid transparent; background:#0d1117; margin-bottom:4px; }
+  .issue.major { border-left-color:#f97316; }
+  .issue.minor { border-left-color:#f59e0b; }
+  .issue.ok { border-left-color:#22c55e; background:#071a0e; }
+  .issue-row { display:flex; align-items:flex-start; justify-content:space-between; gap:6px; }
+  .issue-text { font-size:0.63rem; color:#e2e8f0; line-height:1.4; }
+  .issue.ok .issue-text { color:#86efac; }
+  .sev { font-size:0.56rem; font-weight:700; padding:1px 6px; border-radius:8px; white-space:nowrap; flex-shrink:0; }
+  .sev-maj { background:#1c1006; color:#fb923c; }
+  .sev-min { background:#2d1b00; color:#fbbf24; }
+  .sev-ok { background:#052e16; color:#4ade80; }
+  .fix-row { font-size:0.58rem; color:#475569; margin-top:3px; display:flex; align-items:center; gap:4px; }
+  .fix-pill { background:#1a1033; color:#a78bfa; padding:1px 5px; border-radius:8px; font-size:0.56rem; }
+
+  /* io flow */
+  .io-grid { display:grid; grid-template-columns:1fr 20px 1fr; gap:0; align-items:start; }
+  .io-lbl { font-size:0.56rem; color:#475569; font-weight:700; letter-spacing:.08em; text-transform:uppercase; margin-bottom:5px; }
+  .io-f { background:#0d1117; border-radius:5px; padding:5px 7px; margin-bottom:3px; }
+  .io-f-name { font-size:0.56rem; color:#64748b; margin-bottom:2px; }
+  .io-f-val { font-size:0.62rem; }
+  .io-f-val.url { color:#60a5fa; }
+  .io-f-val.cred { color:#f59e0b; }
+  .io-f-val.pending-val { color:#475569; }
+  .io-f-val.live-val { color:#a78bfa; animation:pulse-text 1.5s infinite; }
+  .io-arrow { display:flex; align-items:flex-start; justify-content:center; padding-top:18px; color:#4c1d95; font-size:0.9rem; }
+
+  .pb-track { height:4px; background:#1e293b; border-radius:20px; overflow:hidden; margin-top:4px; }
+  .pb-fill-run { height:100%; border-radius:20px; background:linear-gradient(90deg,#7c3aed,#a855f7); animation:run-progress 2s infinite alternate; }
+
+  /* right col */
+  .right-col { display:flex; flex-direction:column; gap:6px; overflow:hidden; }
+  .dag-box { background:#0a0f1a; border:1px solid #1e293b; border-radius:9px; padding:8px; }
+  .dag-nodes { display:flex; flex-direction:column; align-items:center; gap:3px; margin-top:5px; }
+  .dn { padding:3px 10px; border-radius:5px; font-size:0.58rem; font-weight:700; min-width:90px; text-align:center; }
+  .dn-done { background:#052e16; color:#4ade80; border:1px solid #166534; }
+  .dn-active-d { background:#180e00; color:#fbbf24; border:1px solid #92400e; }
+  .dn-active-r { background:#100a24; color:#c4b5fd; border:1px solid #4c1d95; animation:pulse-ring-p 1.5s infinite; }
+  .dn-pending { background:#0d1117; color:#334155; border:1px solid #1e293b; }
+  .da { color:#334155; font-size:0.62rem; }
+
+  .log-box { background:#0a0f1a; border:1px solid #1e293b; border-radius:9px; padding:8px; flex:1; overflow:hidden; }
+  .le { font-size:0.57rem; line-height:1.6; }
+  .le-t { font-weight:700; margin-right:2px; }
+  .le-purple .le-t { color:#a855f7; }
+  .le-yellow .le-t { color:#fbbf24; }
+  .le-green .le-t { color:#22c55e; }
+  .le-gray .le-t { color:#475569; }
+  .le-text { color:#475569; }
+
+  /* Animations */
+  @keyframes pulse-dot { 0%,100%{transform:scale(1);opacity:1}50%{transform:scale(.8);opacity:.5} }
+  @keyframes pulse-dot-p { 0%,100%{box-shadow:0 0 5px rgba(168,85,247,.7)}50%{box-shadow:none} }
+  @keyframes pulse-bar { 0%,100%{opacity:1}50%{opacity:.35} }
+  @keyframes pulse-badge { 0%,100%{box-shadow:0 0 6px rgba(245,158,11,.3)}50%{box-shadow:none} }
+  @keyframes pulse-badge-purple { 0%,100%{box-shadow:0 0 6px rgba(168,85,247,.3)}50%{box-shadow:none} }
+  @keyframes pulse-ring { 0%,100%{box-shadow:0 0 10px rgba(245,158,11,.5)}50%{box-shadow:0 0 2px rgba(245,158,11,.1)} }
+  @keyframes pulse-ring-p { 0%,100%{box-shadow:0 0 10px rgba(124,58,237,.4)}50%{box-shadow:none} }
+  @keyframes pulse-text { 0%,100%{opacity:1}50%{opacity:.4} }
+  @keyframes run-progress { 0%{width:55%}100%{width:75%} }
+
+  ::-webkit-scrollbar{width:3px}
+  ::-webkit-scrollbar-thumb{background:#1e293b;border-radius:3px}
+</style>
+</head>
+<body>
+
+<h2>Always-visible progress — Design Time &amp; Run Time</h2>
+<p class="subtitle">The progress strip (highlighted in blue/purple) lives between the objective and the columns — always visible, shows narration + step pills + bar.</p>
+
+<div class="split">
+
+  <!-- ══════════════ DESIGN TIME ══════════════ -->
+  <div>
+    <div style="font-size:0.72rem;color:#22d3ee;font-weight:700;margin-bottom:8px;letter-spacing:.05em">✏️ DESIGN TIME</div>
+    <div class="page-mock">
+
+      <!-- Objective -->
+      <div class="obj-banner design-banner">
+        <div class="obj-label-design">⬡ Objective</div>
+        <div class="obj-text">Analyze GitHub repo for security vulnerabilities</div>
+        <button class="obj-btn-design">✏️ Design</button>
+      </div>
+
+      <!-- ★ PROGRESS STRIP ★ -->
+      <div class="progress-strip design-strip" style="border-left:3px solid #0284c7">
+        <div class="progress-top-row">
+          <div class="progress-narration">
+            <div class="narration-dot design-narration-dot"></div>
+            <div>
+              <div class="narration-text">Critiquing <strong style="color:#fbbf24">Vuln Scanner</strong> — round 3 of 5</div>
+              <div class="narration-sub">Auto-fixing: input_schema missing url · timeout too low</div>
+            </div>
+          </div>
+          <div class="progress-pct design-pct">2 / 4 approved</div>
+        </div>
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill design-bar"></div>
+        </div>
+        <div class="step-pills">
+          <div class="step-pill pill-done"><div class="pill-dot" style="background:#22c55e"></div>① Repo Fetcher ✓</div>
+          <div class="step-pill pill-done"><div class="pill-dot" style="background:#22c55e"></div>② Dep Auditor ✓</div>
+          <div class="step-pill pill-active-design"><div class="pill-dot" style="background:#f59e0b"></div>③ Vuln Scanner ● r3/5</div>
+          <div class="step-pill pill-pending"><div class="pill-dot" style="background:#334155"></div>④ Report Writer</div>
+        </div>
+      </div>
+
+      <!-- Status bar -->
+      <div class="status-bar">
+        <div style="display:flex;align-items:center;gap:7px">
+          <div class="mode-design">✏ DESIGN</div>
+          <div style="font-size:0.6rem;color:#475569">Blueprint in progress…</div>
+        </div>
+        <div class="stat-pills">
+          <div class="sp sp-green">✓ 2</div>
+          <div class="sp sp-yellow">● 1</div>
+          <div class="sp sp-save">💾 Save Plan</div>
+        </div>
+      </div>
+
+      <!-- 3 columns -->
+      <div class="col-body">
+
+        <!-- Col 1 -->
+        <div class="agent-col">
+          <div class="col-header">Agents</div>
+          <div class="ac-inner">
+            <div class="ac done">
+              <div class="ac-name">① Repo Fetcher</div>
+              <div class="dots"><div class="d d-y"></div><div class="d d-g"></div><div class="d d-e"></div><div class="d d-e"></div><div class="d d-e"></div></div>
+              <div class="ac-status">✓ approved ★9.2</div>
+            </div>
+            <div class="ac done">
+              <div class="ac-name">② Dep Auditor</div>
+              <div class="dots"><div class="d d-r"></div><div class="d d-y"></div><div class="d d-g"></div><div class="d d-e"></div><div class="d d-e"></div></div>
+              <div class="ac-status">✓ approved ★8.7</div>
+            </div>
+            <div class="ac critiquing">
+              <div class="ac-name">③ Vuln Scanner</div>
+              <div class="dots"><div class="d d-r"></div><div class="d d-y"></div><div class="d d-a"></div><div class="d d-e"></div><div class="d d-e"></div></div>
+              <div class="ac-status">● critique r3/5</div>
+            </div>
+            <div class="ac waiting">
+              <div class="ac-name">④ Report Writer</div>
+              <div class="dots"><div class="d d-e"></div><div class="d d-e"></div><div class="d d-e"></div><div class="d d-e"></div><div class="d d-e"></div></div>
+              <div class="ac-status">waiting</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Col 2 -->
+        <div class="center-panel">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between">
+            <div>
+              <div class="cp-agent-name" style="color:#fde68a">③ Vuln Scanner</div>
+              <div class="cp-desc">Static analysis · timeout 60s · retry ×3</div>
+            </div>
+            <div class="cp-badge cp-badge-critique">● NEEDS REVISION R3</div>
+          </div>
+          <div class="rt">
+            <div class="rn rn-warn"><div class="rc rc-fail">1</div><div class="rl">crit</div></div>
+            <div class="rn rn-warn"><div class="rc rc-warn">2</div><div class="rl">revised</div></div>
+            <div class="rn"><div class="rc rc-active">3</div><div class="rl rl-active">▶ now</div></div>
+            <div class="rn"><div class="rc rc-empty">4</div><div class="rl">—</div></div>
+            <div class="rn"><div class="rc rc-empty">5</div><div class="rl">—</div></div>
+          </div>
+          <div style="flex:1;overflow:hidden">
+            <div class="issue major">
+              <div class="issue-row">
+                <div class="issue-text">Missing <code style="color:#f97316;background:#1c1006;padding:0 3px;border-radius:2px">repo_url</code> in input_schema</div>
+                <div class="sev sev-maj">MAJOR</div>
+              </div>
+              <div class="fix-row"><div class="fix-pill">⚡ auto-fixing</div><span>adding url field</span></div>
+            </div>
+            <div class="issue minor">
+              <div class="issue-row">
+                <div class="issue-text">timeout_seconds 30 → too low for large repos</div>
+                <div class="sev sev-min">MINOR</div>
+              </div>
+              <div class="fix-row"><div class="fix-pill">⚡ auto-fixing</div><span>updating to 180s</span></div>
+            </div>
+            <div class="issue ok">
+              <div class="issue-row">
+                <div class="issue-text">output_schema complete</div>
+                <div class="sev sev-ok">✓ OK</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Col 3 -->
+        <div class="right-col">
+          <div class="dag-box">
+            <div class="col-header">DAG</div>
+            <div class="dag-nodes">
+              <div class="dn dn-done">① Fetcher ✓</div>
+              <div class="da">↓</div>
+              <div class="dn dn-done">② Auditor ✓</div>
+              <div class="da">↓</div>
+              <div class="dn dn-active-d">③ Scanner ●</div>
+              <div class="da">↓</div>
+              <div class="dn dn-pending">④ Writer</div>
+            </div>
+          </div>
+          <div class="log-box">
+            <div class="col-header">Log</div>
+            <div class="le le-yellow"><span class="le-t">[R3]</span><span class="le-text">Vuln Scanner</span></div>
+            <div class="le le-yellow"><span class="le-t">[FIX]</span><span class="le-text">input_schema</span></div>
+            <div class="le le-green"><span class="le-t">[OK]</span><span class="le-text">Dep Auditor ★8.7</span></div>
+            <div class="le le-green"><span class="le-t">[OK]</span><span class="le-text">Repo Fetcher ★9.2</span></div>
+            <div class="le le-gray"><span class="le-t">[→]</span><span class="le-text">4 agents planned</span></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ RUN TIME ══════════════ -->
+  <div>
+    <div style="font-size:0.72rem;color:#a855f7;font-weight:700;margin-bottom:8px;letter-spacing:.05em">▶ RUN TIME</div>
+    <div class="page-mock">
+
+      <!-- Objective -->
+      <div class="obj-banner run-banner">
+        <div class="obj-label-run">⬡ Objective</div>
+        <div class="obj-text">Analyze GitHub repo for security vulnerabilities</div>
+        <button class="obj-btn-run">▶ Run</button>
+      </div>
+
+      <!-- ★ PROGRESS STRIP ★ -->
+      <div class="progress-strip run-strip" style="border-left:3px solid #7c3aed">
+        <div class="progress-top-row">
+          <div class="progress-narration">
+            <div class="narration-dot run-narration-dot"></div>
+            <div>
+              <div class="narration-text">Executing <strong style="color:#c4b5fd">Vuln Scanner</strong> — scanning 247 files…</div>
+              <div class="narration-sub">12s elapsed · est. 30s remaining · 2 CVEs found so far</div>
+            </div>
+          </div>
+          <div class="progress-pct run-pct">2 / 4 done</div>
+        </div>
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill run-bar"></div>
+        </div>
+        <div class="step-pills">
+          <div class="step-pill pill-done"><div class="pill-dot" style="background:#22c55e"></div>① Repo Fetcher ✓ 1.2s</div>
+          <div class="step-pill pill-done"><div class="pill-dot" style="background:#22c55e"></div>② Dep Auditor ✓ 3.8s</div>
+          <div class="step-pill pill-active-run"><div class="pill-dot" style="background:#a855f7"></div>③ Vuln Scanner ● 12s…</div>
+          <div class="step-pill pill-pending"><div class="pill-dot" style="background:#334155"></div>④ Report Writer</div>
+        </div>
+      </div>
+
+      <!-- Status bar -->
+      <div class="status-bar">
+        <div style="display:flex;align-items:center;gap:7px">
+          <div class="mode-run">▶ RUN</div>
+          <div style="font-size:0.6rem;color:#475569">Agent 3 of 4 running…</div>
+        </div>
+        <div class="stat-pills">
+          <div class="sp sp-green">✓ 2 done</div>
+          <div class="sp sp-purple">● running</div>
+          <div class="sp sp-total">1 waiting</div>
+        </div>
+      </div>
+
+      <!-- 3 columns -->
+      <div class="col-body">
+
+        <!-- Col 1 -->
+        <div class="agent-col">
+          <div class="col-header">Agents</div>
+          <div class="ac-inner">
+            <div class="ac done">
+              <div class="ac-name">① Repo Fetcher</div>
+              <div class="ac-status">✓ completed · 1.2s</div>
+            </div>
+            <div class="ac done">
+              <div class="ac-name">② Dep Auditor</div>
+              <div class="ac-status">✓ completed · 3.8s</div>
+            </div>
+            <div class="ac running-ag">
+              <div class="ac-name">③ Vuln Scanner</div>
+              <div class="pb-track"><div class="pb-fill-run"></div></div>
+              <div class="ac-status">● running · 12s</div>
+            </div>
+            <div class="ac waiting">
+              <div class="ac-name">④ Report Writer</div>
+              <div class="ac-status">waiting</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Col 2 -->
+        <div class="center-panel">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between">
+            <div>
+              <div class="cp-agent-name" style="color:#c4b5fd">③ Vuln Scanner</div>
+              <div class="cp-desc">Static analysis · timeout 180s · retry ×3</div>
+            </div>
+            <div class="cp-badge cp-badge-run">● RUNNING 12s</div>
+          </div>
+          <!-- progress bar in detail -->
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:0.6rem;color:#64748b;margin-bottom:4px">
+              <span>Scanning repository files…</span>
+              <span style="color:#a855f7">~45%</span>
+            </div>
+            <div class="pb-track" style="height:5px"><div class="pb-fill-run"></div></div>
+          </div>
+          <!-- I/O -->
+          <div class="io-grid">
+            <div>
+              <div class="io-lbl">Inputs</div>
+              <div class="io-f"><div class="io-f-name">repo_url</div><div class="io-f-val url">acme/api-service</div></div>
+              <div class="io-f"><div class="io-f-name">github_token</div><div class="io-f-val cred">••••••••</div></div>
+              <div class="io-f"><div class="io-f-name">from ①: files</div><div class="io-f-val" style="color:#94a3b8">247 files</div></div>
+              <div class="io-f"><div class="io-f-name">from ②: cves</div><div class="io-f-val" style="color:#f97316">4 CVEs</div></div>
+            </div>
+            <div class="io-arrow">→</div>
+            <div>
+              <div class="io-lbl">Output</div>
+              <div class="io-f" style="border:1px dashed #2d1b4e"><div class="io-f-name">vulnerabilities</div><div class="io-f-val live-val">scanning…</div></div>
+              <div class="io-f" style="border:1px dashed #2d1b4e;opacity:.5"><div class="io-f-name">severity_map</div><div class="io-f-val pending-val">—</div></div>
+              <div class="io-f" style="border:1px dashed #2d1b4e;opacity:.4"><div class="io-f-name">remediations</div><div class="io-f-val pending-val">—</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Col 3 -->
+        <div class="right-col">
+          <div class="dag-box">
+            <div class="col-header">DAG</div>
+            <div class="dag-nodes">
+              <div class="dn dn-done">① Fetcher ✓</div>
+              <div class="da">↓</div>
+              <div class="dn dn-done">② Auditor ✓</div>
+              <div class="da">↓</div>
+              <div class="dn dn-active-r">③ Scanner ●</div>
+              <div class="da">↓</div>
+              <div class="dn dn-pending">④ Writer</div>
+            </div>
+          </div>
+          <div class="log-box">
+            <div class="col-header">Log</div>
+            <div class="le le-purple"><span class="le-t">[RUN]</span><span class="le-text">Scanner 12s…</span></div>
+            <div class="le le-green"><span class="le-t">[✓]</span><span class="le-text">Auditor 4 CVEs</span></div>
+            <div class="le le-green"><span class="le-t">[✓]</span><span class="le-text">Fetcher 247 files</span></div>
+            <div class="le le-gray"><span class="le-t">[→]</span><span class="le-text">pipeline started</span></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div style="margin-top:16px;background:#0a0f1a;border:1px solid #1e293b;border-radius:8px;padding:12px;font-size:0.78rem;color:#94a3b8">
+  <strong style="color:#f1f5f9">The progress strip</strong> (the highlighted band below the objective) is always visible regardless of which column you're looking at. It shows: <span style="color:#22d3ee">live narration</span> of exactly what the system is doing right now, <span style="color:#fbbf24">step pills</span> showing each agent's state at a glance, a <span style="color:#a855f7">progress bar</span>, and a completion count. User never has to wonder what's happening.
+</div>
+
+</body>
+</html>

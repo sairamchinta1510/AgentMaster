@@ -36,7 +36,7 @@ async def ws_design_handler(websocket: WebSocket, pipeline_id: str):
 
         master = AgentMasterAgent()
         await send("PHASE_UPDATE", {"phase": "ANALYZING_OBJECTIVE", "message": "Calling LLM to analyze objective and design agent pipeline…"})
-        blueprint = await master.design_blueprint_raw(pipeline.objective)
+        blueprint = await master.design_blueprint_raw(pipeline.objective, on_event=send)
         n_agents = len(blueprint.get("agents", []))
         await send("BLUEPRINT_READY", {"blueprint": blueprint})
         await send("PHASE_UPDATE", {"phase": "BLUEPRINT_READY", "message": f"Blueprint ready — {n_agents} atomic agent(s) identified"})
@@ -73,6 +73,7 @@ async def ws_design_handler(websocket: WebSocket, pipeline_id: str):
                 "design_time",
                 pipeline_id,
                 {},
+                on_event=send,
             )
             await send(
                 "AGENT_PRODUCED",
