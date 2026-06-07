@@ -1,10 +1,7 @@
 import asyncio
-import logging
 import os
 import tempfile
 from pathlib import Path
-
-logger = logging.getLogger(__name__)
 
 MAX_STDOUT_BYTES = 50 * 1024   # 50 KB
 EXEC_TIMEOUT_SECONDS = 60
@@ -15,7 +12,7 @@ async def execute_python_code(
     env_vars: dict[str, str],
 ) -> tuple[str, str, int]:
     """
-    Write code to /tmp, run in subprocess with env vars injected.
+    Write code to a temp file, run in subprocess with env vars injected.
     Returns (stdout, stderr, returncode).
     Cleans up temp file on exit.
     """
@@ -23,7 +20,7 @@ async def execute_python_code(
         mode="w",
         suffix=".py",
         prefix="agentmaster_",
-        dir="/tmp",
+        dir=None,
         delete=False,
     ) as f:
         f.write(code)
