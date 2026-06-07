@@ -103,7 +103,12 @@ async def ws_extend_handler(websocket: WebSocket, pipeline_id: str):
             })
 
             for final_agent in result_agents:
-                state = AgentState.APPROVED if final_critique.errors_remaining == 0 else AgentState.USER_ESCALATED
+                agent_critique = (
+                    final_agent.critique_history[-1]
+                    if len(result_agents) > 1 and final_agent.critique_history
+                    else final_critique
+                )
+                state = AgentState.APPROVED if agent_critique.errors_remaining == 0 else AgentState.USER_ESCALATED
                 await send("AGENT_STATE_CHANGE", {"agent_id": final_agent.agent_id, "state": state})
                 approved_new.append(final_agent.model_dump(exclude={"critique_history"}))
 

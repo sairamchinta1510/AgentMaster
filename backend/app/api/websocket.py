@@ -64,6 +64,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
         critique = AgentCritiqueAgent()
 
         approved_count = 0
+        final_agent_count = 0
         for agent_spec in blueprint.get("agents", []):
             await send(
                 "AGENT_STARTED",
@@ -98,9 +99,15 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 },
             )
             for final_agent in result_agents:
+                final_agent_count += 1
+                agent_critique = (
+                    final_agent.critique_history[-1]
+                    if len(result_agents) > 1 and final_agent.critique_history
+                    else final_critique
+                )
                 state = (
                     AgentState.APPROVED
-                    if final_critique.errors_remaining == 0
+                    if agent_critique.errors_remaining == 0
                     else AgentState.USER_ESCALATED
                 )
                 if state == AgentState.APPROVED:
@@ -121,7 +128,8 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             "SESSION_COMPLETED",
             {
                 "phase": "DESIGN",
-                "message": f"Blueprint complete. {approved_count}/{len(blueprint.get('agents', []))} agents approved. Ready for Dry Run.",
+                "message": f"Blueprint complete. {approved_count}/{final_agent_count} agents approved. Ready for Dry Run.",
+                "agent_count": final_agent_count,
                 "library_id": lib_id,
             },
         )
