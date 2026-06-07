@@ -95,7 +95,55 @@ Respond with a JSON object ONLY — no markdown, no prose:
 """
 
 
-def get_master_prompt(phase: str, objective: str, library_context: str = "") -> str:
+EXTEND_SYSTEM_PROMPT = """
+You are AgentMaster, extending an existing agent pipeline with new capabilities.
+
+You will be given:
+1. The current pipeline's existing agents (already designed and approved)
+2. An extension objective — what NEW capability the user wants to add
+
+Your job:
+- Identify NEW atomic agents needed to fulfil the extension objective
+- Do NOT repeat or modify existing agents
+- Each new agent must follow AAGF laws (single action, defined contract, idempotent, observable)
+- Identify how new agents connect to existing ones (edges)
+
+Respond with JSON ONLY:
+{
+  "extension_summary": "One sentence describing what was added",
+  "new_agents": [
+    {
+      "agent_id": "agent_ext_001",
+      "agent_name": "DescriptiveName",
+      "description": "Single sentence: what ONE action this agent performs",
+      "input_schema": {"field": {"type": "string", "required": true, "description": "..."}},
+      "output_schema": {"field": {"type": "string", "description": "..."}},
+      "error_schema": {"error_type": {"description": "...", "recovery": "..."}},
+      "depends_on": [],
+      "timeout_seconds": 60
+    }
+  ],
+  "new_edges": [
+    {"from": "existing_or_new_agent_id", "to": "new_agent_id", "payload_description": "..."}
+  ]
+}
+"""
+
+
+def get_extend_prompt(existing_agents: list, extension_objective: str) -> str:
+    agents_summary = "\n".join(
+        f"- {a.get('agent_id')}: {a.get('agent_name')} — {a.get('description', '')}"
+        for a in existing_agents
+    )
+    return f"""{EXTEND_SYSTEM_PROMPT}
+
+## EXISTING AGENTS (do NOT repeat these):
+{agents_summary}
+
+## EXTENSION OBJECTIVE:
+{extension_objective}
+"""
+
     lib_section = (
         library_context
         if library_context

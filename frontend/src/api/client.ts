@@ -24,6 +24,12 @@ export const listPipelines = () =>
 export const getPipeline = (id: string) =>
   api.get<Pipeline>(`/api/pipelines/${id}`);
 
+export const updatePipeline = (id: string, name: string) =>
+  api.patch<Pipeline>(`/api/pipelines/${id}`, { name, objective: "" });
+
+export const suggestExtensions = (id: string, extension_objective: string) =>
+  api.post(`/api/pipelines/${id}/suggest-extensions`, { extension_objective });
+
 export const deletePipeline = (id: string) =>
   api.delete(`/api/pipelines/${id}`);
 

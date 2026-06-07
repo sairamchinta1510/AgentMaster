@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
 import { useDesignStore } from "../store/runStore";
 import { usePipelineStore } from "../store/pipelineStore";
 import { useDesignWS } from "../hooks/useDesignWS";
-import { getPipeline } from "../api/client";
+import { getPipeline, updatePipeline, suggestExtensions, api } from "../api/client";
 import { ProgressStrip, type StepPill } from "../components/ProgressStrip";
 import { DesignAgentList } from "../components/AgentListColumn";
 import { CritiqueDetailColumn } from "../components/CritiqueDetailColumn";
@@ -18,6 +18,21 @@ function ThinkingDots() {
       <span className="thinking-dot h-1.5 w-1.5 rounded-full bg-orange-400 inline-block" />
       <span className="thinking-dot h-1.5 w-1.5 rounded-full bg-orange-400 inline-block" />
     </span>
+  );
+}
+
+/** Modal overlay wrapper */
+function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+      <div className="bg-[#0d1117] border border-gray-700/60 rounded-2xl w-full max-w-lg mx-4 p-6 shadow-2xl">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-white font-bold font-mono text-base">{title}</h2>
+          <button onClick={onClose} className="text-gray-500 hover:text-white text-xl leading-none">✕</button>
+        </div>
+        {children}
+      </div>
+    </div>
   );
 }
 
@@ -42,7 +57,32 @@ export function DesignPage() {
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [designTrigger, setDesignTrigger] = useState(0);
 
+  // Save modal
+  const [showSave, setShowSave] = useState(false);
+  const [saveName, setSaveName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const saveInputRef = useRef<HTMLInputElement>(null);
+
+  // Extend modal
+  const [showExtend, setShowExtend] = useState(false);
+  const [extendObjective, setExtendObjective] = useState("");
+  const [extendLoading, setExtendLoading] = useState(false);
+  const [extendSuggestions, setExtendSuggestions] = useState<{
+    extension_summary: string;
+    new_agents: Array<{ agent_id: string; agent_name: string; description: string }>;
+    new_edges: Array<{ from: string; to: string; payload_description: string }>;
+  } | null>(null);
+  const [selectedNewAgents, setSelectedNewAgents] = useState<Set<string>>(new Set());
+
   const { stop } = useDesignWS(pipelineId ?? null, designTrigger);
+
+  // Pre-fill save name from pipeline
+  useEffect(() => {
+    if (showSave && activePipeline) setSaveName(activePipeline.name || "");
+  }, [showSave, activePipeline]);
+  useEffect(() => {
+    if (showSave) setTimeout(() => saveInputRef.current?.focus(), 50);
+  }, [showSave]);
 
   useEffect(() => {
     if (!pipelineId) return;
@@ -75,6 +115,54 @@ export function DesignPage() {
     const target = active ?? agentList[0];
     if (target) setSelectedAgentId(target.agent_id);
   }, [agentList, selectedAgentId]);
+
+  // Save handler
+  const handleSave = async () => {
+    if (!pipelineId || !saveName.trim()) return;
+    setSaving(true);
+    try {
+      const r = await updatePipeline(pipelineId, saveName.trim());
+      setActivePipeline(r.data);
+      upsertSummary({ id: r.data.id, objective: r.data.objective, name: r.data.name, agent_count: agentList.length, created_at: r.data.created_at });
+      setShowSave(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Extend: ask LLM for suggestions
+  const handleExtendSuggest = async () => {
+    if (!pipelineId || !extendObjective.trim()) return;
+    setExtendLoading(true);
+    setExtendSuggestions(null);
+    setSelectedNewAgents(new Set());
+    try {
+      const r = await suggestExtensions(pipelineId, extendObjective.trim());
+      setExtendSuggestions(r.data);
+      const allIds = new Set((r.data.new_agents as Array<{agent_id:string}>).map((a) => a.agent_id));
+      setSelectedNewAgents(allIds); // all selected by default
+    } finally {
+      setExtendLoading(false);
+    }
+  };
+
+  // Extend: apply selected agents → re-design with extended objective
+  const handleExtendApply = () => {
+    if (!extendSuggestions || !pipelineId || !activePipeline) return;
+    const picked = extendSuggestions.new_agents.filter((a) => selectedNewAgents.has(a.agent_id));
+    if (picked.length === 0) return;
+    const addendum = `\n\nEXTENSION — also add these capabilities: ${picked.map((a) => `${a.agent_name}: ${a.description}`).join('; ')}`;
+    setShowExtend(false);
+    setExtendObjective("");
+    setExtendSuggestions(null);
+    api.patch(`/api/pipelines/${pipelineId}`, {
+      name: activePipeline.name,
+      objective: activePipeline.objective + addendum,
+    }).then(() => {
+      setActivePipeline({ ...activePipeline, objective: activePipeline.objective + addendum });
+      setDesignTrigger((t) => t + 1);
+    }).catch(() => {});
+  };
 
   const pills: StepPill[] = agentList.map((a) => {
     const isCritiquing =
@@ -212,24 +300,50 @@ export function DesignPage() {
           <span className="text-gray-600">
             {isComplete ? "Blueprint complete" : isWorking ? "Blueprint in progress…" : "Ready to design"}
           </span>
-        </div>
-        <div className="flex items-center gap-3">
-          {approvedCount > 0 && (
-            <span className="text-green-400 font-bold">✓ {approvedCount}</span>
-          )}
+          {approvedCount > 0 && <span className="text-green-400 font-bold">✓ {approvedCount}</span>}
           {agentList.length - approvedCount > 0 && isWorking && (
             <span className="text-amber-400 font-bold animate-pulse">● {agentList.length - approvedCount}</span>
           )}
+        </div>
+        <div className="flex items-center gap-2">
+          {/* Extend button — available once design is complete */}
           <button
-            className={`px-4 py-1.5 rounded-lg font-bold transition-all flex items-center gap-2 ${
+            className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 text-xs ${
               isComplete
-                ? "bg-purple-700 hover:bg-purple-600 text-white shadow-lg shadow-purple-700/20"
-                : "bg-gray-800 text-gray-600 cursor-not-allowed"
+                ? "bg-cyan-900/60 hover:bg-cyan-800 text-cyan-300 border border-cyan-700/60"
+                : "bg-gray-800/60 text-gray-700 cursor-not-allowed border border-gray-800"
+            }`}
+            disabled={!isComplete}
+            onClick={() => setShowExtend(true)}
+            title="Add more agents to extend this pipeline"
+          >
+            ＋ Extend
+          </button>
+          {/* Save button */}
+          <button
+            className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 text-xs ${
+              isComplete
+                ? "bg-gray-700 hover:bg-gray-600 text-white border border-gray-600"
+                : "bg-gray-800/60 text-gray-700 cursor-not-allowed border border-gray-800"
+            }`}
+            disabled={!isComplete}
+            onClick={() => setShowSave(true)}
+            title="Save pipeline with a name"
+          >
+            💾 Save
+          </button>
+          {/* Run button */}
+          <button
+            className={`px-4 py-1.5 rounded-lg font-bold transition-all flex items-center gap-2 text-xs ${
+              isComplete
+                ? "bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-700/30"
+                : "bg-gray-800/60 text-gray-700 cursor-not-allowed border border-gray-800"
             }`}
             disabled={!isComplete}
             onClick={() => navigate(`/run/${pipelineId}`)}
+            title="Run this pipeline"
           >
-            💜 Save Plan
+            ▶ Run
           </button>
         </div>
       </div>
@@ -260,6 +374,100 @@ export function DesignPage() {
           />
         </Panel>
       </PanelGroup>
+
+      {/* ── Save Modal ─────────────────────────────────────────────────────── */}
+      {showSave && (
+        <Modal title="💾 Save Pipeline" onClose={() => setShowSave(false)}>
+          <p className="text-gray-400 text-sm mb-4">Give this pipeline a name so you can find it later.</p>
+          <input
+            ref={saveInputRef}
+            className="w-full bg-[#161b27] border border-gray-600/60 rounded-lg px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-cyan-500 mb-4"
+            placeholder="e.g. Log Topology Analyser v1"
+            value={saveName}
+            onChange={(e) => setSaveName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && saveName.trim() && handleSave()}
+          />
+          <div className="flex gap-3 justify-end">
+            <button onClick={() => setShowSave(false)} className="px-4 py-2 rounded-lg text-gray-400 hover:text-white text-sm font-mono">Cancel</button>
+            <button
+              onClick={handleSave}
+              disabled={!saveName.trim() || saving}
+              className="px-5 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-bold text-sm font-mono transition-colors"
+            >
+              {saving ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Extend Modal ───────────────────────────────────────────────────── */}
+      {showExtend && (
+        <Modal title="＋ Extend Pipeline" onClose={() => { setShowExtend(false); setExtendSuggestions(null); setExtendObjective(""); }}>
+          {!extendSuggestions ? (
+            <>
+              <p className="text-gray-400 text-sm mb-3">Describe what new capability you want to add to this pipeline.</p>
+              <textarea
+                className="w-full bg-[#161b27] border border-gray-600/60 rounded-lg px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-cyan-500 mb-4 resize-none"
+                rows={3}
+                placeholder="e.g. Also generate a Grafana dashboard from the log metrics"
+                value={extendObjective}
+                onChange={(e) => setExtendObjective(e.target.value)}
+              />
+              <div className="flex gap-3 justify-end">
+                <button onClick={() => setShowExtend(false)} className="px-4 py-2 rounded-lg text-gray-400 hover:text-white text-sm font-mono">Cancel</button>
+                <button
+                  onClick={handleExtendSuggest}
+                  disabled={!extendObjective.trim() || extendLoading}
+                  className="px-5 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-bold text-sm font-mono transition-colors flex items-center gap-2"
+                >
+                  {extendLoading ? <><span className="animate-spin">⟳</span> Asking LLM…</> : "Suggest Agents →"}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-green-400 text-sm font-mono mb-1">✓ {extendSuggestions.extension_summary}</p>
+              <p className="text-gray-500 text-xs mb-3">Select which new agents to add:</p>
+              <div className="space-y-2 max-h-64 overflow-y-auto mb-4">
+                {extendSuggestions.new_agents.map((a) => {
+                  const checked = selectedNewAgents.has(a.agent_id);
+                  return (
+                    <label key={a.agent_id} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${checked ? "border-cyan-600/60 bg-cyan-900/20" : "border-gray-700/60 bg-[#161b27] hover:border-gray-600"}`}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => setSelectedNewAgents((s) => {
+                          const next = new Set(s);
+                          checked ? next.delete(a.agent_id) : next.add(a.agent_id);
+                          return next;
+                        })}
+                        className="mt-0.5 accent-cyan-500"
+                      />
+                      <div>
+                        <div className="text-white font-mono font-bold text-sm">{a.agent_name}</div>
+                        <div className="text-gray-400 text-xs">{a.description}</div>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+              <div className="flex gap-3 justify-between items-center">
+                <button onClick={() => setExtendSuggestions(null)} className="text-gray-500 hover:text-gray-300 text-xs font-mono">← Back</button>
+                <div className="flex gap-2">
+                  <button onClick={() => { setShowExtend(false); setExtendSuggestions(null); }} className="px-4 py-2 rounded-lg text-gray-400 hover:text-white text-sm font-mono">Cancel</button>
+                  <button
+                    onClick={handleExtendApply}
+                    disabled={selectedNewAgents.size === 0}
+                    className="px-5 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-bold text-sm font-mono transition-colors"
+                  >
+                    Add {selectedNewAgents.size} Agent{selectedNewAgents.size !== 1 ? "s" : ""} & Re-design
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </Modal>
+      )}
     </div>
   );
 }

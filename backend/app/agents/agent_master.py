@@ -2,7 +2,7 @@ import json
 import logging
 from openai import AsyncOpenAI
 from app.config import settings
-from app.prompts.master import get_master_prompt
+from app.prompts.master import get_master_prompt, get_extend_prompt
 from app.models.dag import DAGGraph, DAGNode, DAGEdge
 from app.models.session import ExecutionSession
 from app.agents.llm_utils import stream_llm_json
@@ -46,6 +46,21 @@ class AgentMasterAgent:
             temperature=0.2,
             on_event=on_event,
             context="Designing pipeline architecture",
+        )
+        return json.loads(content)
+
+    async def suggest_extensions(self, existing_agents: list, extension_objective: str, on_event=None) -> dict:
+        """Suggest new agents to extend an existing pipeline."""
+        prompt = get_extend_prompt(existing_agents, extension_objective)
+        content = await stream_llm_json(
+            self.client, self.model,
+            messages=[
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": f"Suggest new agents to extend the pipeline: {extension_objective}"},
+            ],
+            temperature=0.2,
+            on_event=on_event,
+            context="Suggesting pipeline extensions",
         )
         return json.loads(content)
 
