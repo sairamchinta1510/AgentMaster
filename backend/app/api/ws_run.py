@@ -75,14 +75,46 @@ async def ws_run_handler(websocket: WebSocket, run_id: str):
 
         executor = AgentExecutorAgent()
         results = []
+        failed_agent_ids: set[str] = set()
         context: dict = dict(run.inputs or {})
         start_ms = int(time.time() * 1000)
 
         for agent_spec in ordered_agents:
+            agent_id = agent_spec["agent_id"]
+
+            # Skip this agent if any of its dependencies failed
+            failed_deps = [dep for dep in agent_spec.get("depends_on", []) if dep in failed_agent_ids]
+            if failed_deps:
+                skip_msg = f"Skipped: upstream agent(s) failed — {', '.join(failed_deps)}"
+                logger.warning("Skipping %s because of failed deps: %s", agent_id, failed_deps)
+                from app.models.run import AgentResult
+                skipped_result = AgentResult(
+                    agent_id=agent_id,
+                    agent_name=agent_spec.get("agent_name", agent_id),
+                    status="failed",
+                    output={},
+                    error=skip_msg,
+                    duration_ms=0,
+                )
+                results.append(skipped_result)
+                failed_agent_ids.add(agent_id)
+                await send(
+                    "AGENT_RESULT",
+                    {
+                        "agent_id": agent_id,
+                        "agent_name": skipped_result.agent_name,
+                        "status": "failed",
+                        "output": {},
+                        "error": skip_msg,
+                        "duration_ms": 0,
+                    },
+                )
+                continue
+
             await send(
                 "AGENT_STARTED",
                 {
-                    "agent_id": agent_spec["agent_id"],
+                    "agent_id": agent_id,
                     "agent_name": agent_spec["agent_name"],
                 },
             )
@@ -100,7 +132,10 @@ async def ws_run_handler(websocket: WebSocket, run_id: str):
 
             result = await executor.execute(agent_spec, context, on_code_event=_on_code_event)
             results.append(result)
-            context.update(result.output)
+            if result.status == "failed":
+                failed_agent_ids.add(agent_id)
+            else:
+                context.update(result.output)
 
             await send(
                 "AGENT_RESULT",
