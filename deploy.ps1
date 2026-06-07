@@ -51,7 +51,7 @@ gcloud run deploy $ServiceName `
     --memory 1Gi `
     --cpu 1 `
     --timeout 3600 `
-    --set-env-vars "GEMINI_API_KEY=$ApiKey,DATABASE_URL=sqlite:////tmp/data/agentmaster.db,CORS_ORIGINS_RAW=*" `
+    --set-env-vars "GEMINI_API_KEY=$ApiKey,DATABASE_URL=sqlite:////tmp/data/agentmaster.db,CORS_ORIGINS_RAW=*,GCS_BUCKET=agentmaster-db-$PROJECT,GCS_DB_KEY=agentmaster.db" `
     --project $PROJECT
 
 if ($LASTEXITCODE -ne 0) { Write-Error "Cloud Run deploy failed"; exit 1 }

@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models.pipeline import PipelineORM, Pipeline, PipelineSummary
+from app.gcs_backup import backup_to_gcs
 
 router = APIRouter(prefix="/api/pipelines", tags=["pipelines"])
 logger = logging.getLogger(__name__)
@@ -29,6 +30,7 @@ def create_pipeline(req: CreatePipelineRequest, db: Session = Depends(get_db)):
     db.add(row)
     db.commit()
     db.refresh(row)
+    backup_to_gcs()
     return _orm_to_pipeline(row)
 
 
@@ -53,6 +55,7 @@ def delete_pipeline(pipeline_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Pipeline not found")
     db.delete(row)
     db.commit()
+    backup_to_gcs()
 
 
 def _orm_to_pipeline(row: PipelineORM) -> Pipeline:

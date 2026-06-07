@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -7,14 +8,22 @@ from app.api.routes import pipelines, runs
 from app.api.ws_design import ws_design_handler
 from app.api.ws_run import ws_run_handler
 from app.db import Base, engine
+from app.gcs_backup import restore_from_gcs
 import os
 
 import app.models.pipeline  # noqa: F401
 import app.models.run  # noqa: F401
 
-Base.metadata.create_all(bind=engine)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    restore_from_gcs()          # download DB from GCS before creating tables
+    Base.metadata.create_all(bind=engine)
+    yield
+
 
 app = FastAPI(
+    lifespan=lifespan,
     title="AgentMaster",
     version="2.0.0",
     description="Autonomous Agentic Graph Framework — Design pipelines at design time, execute at run time.",

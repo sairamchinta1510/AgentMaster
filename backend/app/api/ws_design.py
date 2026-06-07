@@ -9,6 +9,7 @@ from app.agents.agent_critique import AgentCritiqueAgent, run_critique_loop
 from app.models.pipeline import PipelineORM
 from app.models.agent import AgentState
 from app.config import settings
+from app.gcs_backup import backup_to_gcs
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +117,7 @@ async def ws_design_handler(websocket: WebSocket, pipeline_id: str):
         pipeline.input_schema = input_fields
         pipeline.updated_at = datetime.now(timezone.utc)
         db.commit()
+        backup_to_gcs()
 
         await send(
             "DESIGN_COMPLETE",
