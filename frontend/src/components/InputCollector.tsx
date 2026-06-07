@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { provideInput } from "../api/client";
 
 interface InputRequest {
   input_name: string;
@@ -9,30 +8,14 @@ interface InputRequest {
 }
 
 interface Props {
-  sessionId: string;
   requests: InputRequest[];
-  onSubmit: () => void;
+  onSubmit: (values: Record<string, string>) => void;
 }
 
-export function InputCollector({ sessionId, requests, onSubmit }: Props) {
+export function InputCollector({ requests, onSubmit }: Props) {
   const [values, setValues] = useState<Record<string, string>>({});
-  const [submitting, setSubmitting] = useState(false);
 
   if (requests.length === 0) return null;
-
-  const handleSubmit = async () => {
-    setSubmitting(true);
-    try {
-      for (const req of requests) {
-        if (values[req.input_name]) {
-          await provideInput(sessionId, req.input_name, values[req.input_name]);
-        }
-      }
-      onSubmit();
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   return (
     <div className="bg-yellow-950 border border-yellow-700 rounded-lg p-4 font-mono">
@@ -56,11 +39,10 @@ export function InputCollector({ sessionId, requests, onSubmit }: Props) {
         </div>
       ))}
       <button
-        className="bg-yellow-600 hover:bg-yellow-500 text-black font-bold px-4 py-2 rounded text-sm transition-colors disabled:opacity-50"
-        onClick={handleSubmit}
-        disabled={submitting}
+        className="bg-yellow-600 hover:bg-yellow-500 text-black font-bold px-4 py-2 rounded text-sm transition-colors"
+        onClick={() => onSubmit(values)}
       >
-        {submitting ? "Submitting..." : "Submit Inputs"}
+        Submit Inputs
       </button>
     </div>
   );

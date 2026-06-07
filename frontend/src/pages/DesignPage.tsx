@@ -84,31 +84,34 @@ export function DesignPage() {
     };
   });
 
-  // Live narration
+  // Live narration — split agent name for highlight
   const activeAgent = agentList.find(
     (a) => a.state !== "PENDING" && a.state !== "APPROVED" && a.state !== "COMPLETED"
   );
   let narration = "Waiting to start design…";
+  let narrationHighlight: string | undefined;
   let narrationSub: string | undefined;
   if (isComplete) {
     narration = `✓ All ${approvedCount} agents approved`;
   } else if (activeAgent) {
     const isCritiquing = activeAgent.state.startsWith("DESIGN_CRITIQUE");
     const roundNum = isCritiquing ? activeAgent.state.slice(-1) : null;
-    narration = isCritiquing
-      ? `Critiquing ${activeAgent.agent_name} — round ${roundNum} of 5`
-      : activeAgent.state === "SPECIFYING"
-      ? `Designing ${activeAgent.agent_name}…`
-      : activeAgent.state === "REVISING_SPEC" || activeAgent.state === "AUTO_FIX"
-      ? `Auto-fixing ${activeAgent.agent_name}…`
-      : `${activeAgent.agent_name} — ${activeAgent.state}`;
-    const latestCritique =
-      activeAgent.critique_history[activeAgent.critique_history.length - 1];
-    if (latestCritique && latestCritique.issues.length > 0) {
-      narrationSub = `Issues: ${latestCritique.issues
-        .slice(0, 2)
-        .map((i) => i.category)
-        .join(" · ")}`;
+    if (isCritiquing) {
+      narration = `Critiquing`;
+      narrationHighlight = activeAgent.agent_name;
+      narrationSub = `round ${roundNum} of 5`;
+    } else if (activeAgent.state === "REVISING_SPEC" || activeAgent.state === "AUTO_FIX") {
+      narration = `Auto-fixing`;
+      narrationHighlight = activeAgent.agent_name;
+    } else if (activeAgent.state === "SPECIFYING") {
+      narration = `Designing`;
+      narrationHighlight = activeAgent.agent_name;
+    } else {
+      narration = `${activeAgent.agent_name} — ${activeAgent.state}`;
+    }
+    const latestCritique = activeAgent.critique_history?.[activeAgent.critique_history.length - 1];
+    if (latestCritique && (latestCritique.issues ?? []).length > 0) {
+      narrationSub = `Auto-fixing: ${(latestCritique.issues ?? []).slice(0, 2).map((i) => i.category).join(" · ")}`;
     }
   } else if (isConnected && phase) {
     narration = phase;
@@ -132,36 +135,24 @@ export function DesignPage() {
   return (
     <div className="flex flex-col h-full bg-gray-950 text-white overflow-hidden">
       {/* Zone 1: Objective banner */}
-      <div className="shrink-0 px-4 py-2 border-b border-gray-800 bg-[#0d1b2e] flex items-center justify-between gap-4">
+      <div className="shrink-0 px-4 py-2.5 border-b border-gray-800 bg-[#0d1117] flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
-          <span className="text-cyan-500 text-xs font-mono uppercase tracking-wider shrink-0">
-            ✏ Design
-          </span>
-          <span
-            className="text-gray-200 text-sm truncate"
-            title={activePipeline?.objective}
-          >
+          <span className="text-cyan-500 text-xs font-mono shrink-0">O</span>
+          <span className="text-cyan-600 text-xs font-mono uppercase tracking-wider shrink-0">Objective</span>
+          <span className="text-gray-200 text-sm truncate" title={activePipeline?.objective}>
             {activePipeline?.objective || "Loading…"}
           </span>
         </div>
         <div className="flex items-center gap-3 shrink-0">
           {isComplete && (
             <button
-              className="bg-purple-700 hover:bg-purple-600 text-white px-4 py-1.5 rounded text-xs font-mono transition-colors"
+              className="bg-purple-700 hover:bg-purple-600 text-white px-4 py-1.5 rounded-lg text-xs font-mono font-bold transition-colors"
               onClick={() => navigate(`/run/${pipelineId}`)}
             >
               ▶ Run Pipeline
             </button>
           )}
-          <span
-            className={`text-xs font-mono ${
-              isConnected
-                ? "text-green-400"
-                : isComplete
-                ? "text-green-500"
-                : "text-yellow-500"
-            }`}
-          >
+          <span className={`text-xs font-mono ${isConnected ? "text-green-400" : isComplete ? "text-green-500" : "text-yellow-600"}`}>
             {isConnected ? "● LIVE" : isComplete ? "✓ Done" : "○ Connecting…"}
           </span>
         </div>
@@ -170,6 +161,7 @@ export function DesignPage() {
       {/* Zone 2: Progress strip */}
       <ProgressStrip
         narration={narration}
+        narrationHighlight={narrationHighlight}
         narrationSub={narrationSub}
         pills={pills}
         progress={progress}
@@ -179,33 +171,34 @@ export function DesignPage() {
       />
 
       {/* Zone 3: Status bar */}
-      <div className="shrink-0 px-4 py-1.5 border-b border-gray-800 bg-gray-950 flex items-center justify-between text-xs font-mono">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="bg-cyan-900 text-cyan-300 border border-cyan-700 px-2 py-0.5 rounded">
-            ✏ DESIGN TIME
+      <div className="shrink-0 px-4 py-1.5 border-b border-gray-800 bg-[#0d1117] flex items-center justify-between text-xs font-mono">
+        <div className="flex items-center gap-3">
+          <span className="bg-cyan-900/60 text-cyan-400 border border-cyan-800 px-2 py-0.5 rounded font-bold">
+            — DESIGN
           </span>
-          {agentList.length > 0 && (
-            <span className="bg-green-900 text-green-300 border border-green-700 px-2 py-0.5 rounded">
-              {approvedCount} approved
-            </span>
-          )}
-          {agentList.length - approvedCount > 0 && (
-            <span className="bg-amber-900 text-amber-300 border border-amber-700 px-2 py-0.5 rounded">
-              {agentList.length - approvedCount} critiquing
-            </span>
-          )}
+          <span className="text-gray-500">
+            {isComplete ? "Blueprint complete" : isConnected ? "Blueprint in progress…" : "Connecting…"}
+          </span>
         </div>
-        <button
-          className={`px-4 py-1.5 rounded transition-colors ${
-            isComplete
-              ? "bg-purple-700 hover:bg-purple-600 text-white"
-              : "bg-gray-800 text-gray-600 cursor-not-allowed"
-          }`}
-          disabled={!isComplete}
-          onClick={() => navigate(`/run/${pipelineId}`)}
-        >
-          💾 Save &amp; Run →
-        </button>
+        <div className="flex items-center gap-3">
+          {approvedCount > 0 && (
+            <span className="text-green-400 font-bold">✓ {approvedCount}</span>
+          )}
+          {agentList.length - approvedCount > 0 && isConnected && (
+            <span className="text-amber-400 font-bold animate-pulse">● {agentList.length - approvedCount}</span>
+          )}
+          <button
+            className={`px-4 py-1.5 rounded-lg font-bold transition-colors ${
+              isComplete
+                ? "bg-purple-700 hover:bg-purple-600 text-white"
+                : "bg-gray-800 text-gray-600 cursor-not-allowed"
+            }`}
+            disabled={!isComplete}
+            onClick={() => navigate(`/run/${pipelineId}`)}
+          >
+            💜 Save Plan
+          </button>
+        </div>
       </div>
 
       {/* Zone 4: 3-column body */}
@@ -221,7 +214,10 @@ export function DesignPage() {
 
         {/* Col 2: Critique detail */}
         <div className="p-4 overflow-hidden">
-          <CritiqueDetailColumn agent={selectedAgent} />
+          <CritiqueDetailColumn
+            agent={selectedAgent}
+            agentIndex={selectedAgentId ? agentList.findIndex(a => a.agent_id === selectedAgentId) : undefined}
+          />
         </div>
 
         {/* Col 3: DAG + log */}

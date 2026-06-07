@@ -10,6 +10,7 @@ export interface StepPill {
 
 interface ProgressStripProps {
   narration: string;
+  narrationHighlight?: string; // e.g. agent name shown in color
   narrationSub?: string;
   pills: StepPill[];
   progress: number;
@@ -19,23 +20,24 @@ interface ProgressStripProps {
 }
 
 const STATE_PILL: Record<StepPill["state"], string> = {
-  done:           "bg-green-700 text-green-200 border-green-500",
-  "active-design":"bg-amber-700 text-amber-100 border-amber-400 animate-pulse",
-  "active-run":   "bg-purple-700 text-purple-100 border-purple-400 animate-pulse",
-  pending:        "bg-gray-800 text-gray-500 border-gray-700",
-  error:          "bg-red-800 text-red-200 border-red-500",
+  done:           "bg-green-900/60 text-green-300 border-green-700",
+  "active-design":"bg-amber-900/60 text-amber-200 border-amber-500 animate-pulse",
+  "active-run":   "bg-purple-900/60 text-purple-200 border-purple-500 animate-pulse",
+  pending:        "bg-gray-900/40 text-gray-600 border-gray-800",
+  error:          "bg-red-900/60 text-red-300 border-red-600",
 };
 
 const STATE_DOT: Record<StepPill["state"], string> = {
   done:           "bg-green-400",
   "active-design":"bg-amber-400 animate-pulse",
   "active-run":   "bg-purple-400 animate-pulse",
-  pending:        "bg-gray-600",
+  pending:        "bg-gray-700",
   error:          "bg-red-400",
 };
 
 export function ProgressStrip({
   narration,
+  narrationHighlight,
   narrationSub,
   pills,
   progress,
@@ -51,43 +53,45 @@ export function ProgressStrip({
     if (active) active.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
   }, [pills]);
 
-  const barColor =
-    mode === "design" ? "bg-gradient-to-r from-cyan-600 to-amber-500" :
-    mode === "run"    ? "bg-purple-600" :
-                        "bg-gray-700";
-
-  const dotColor =
-    mode === "idle"   ? "bg-gray-600" :
-    mode === "design" ? "bg-cyan-400 animate-pulse" :
-                        "bg-purple-400 animate-pulse";
-
-  const borderColor =
-    mode === "design" ? "border-cyan-900" :
-    mode === "run"    ? "border-purple-900" :
-                        "border-gray-800";
+  const stripBg   = mode === "design" ? "bg-[#071828]" : mode === "run" ? "bg-[#110a24]" : "bg-gray-950";
+  const stripBorder = mode === "design" ? "border-l-4 border-l-cyan-600 border-b border-b-cyan-900" :
+                      mode === "run"    ? "border-l-4 border-l-purple-600 border-b border-b-purple-900" :
+                                          "border-b border-gray-800";
+  const barColor  = mode === "design" ? "bg-gradient-to-r from-cyan-500 to-amber-500" :
+                    mode === "run"    ? "bg-purple-500" : "bg-gray-700";
+  const dotColor  = mode === "design" ? "bg-amber-400 animate-pulse" :
+                    mode === "run"    ? "bg-purple-400 animate-pulse" : "bg-gray-600";
+  const countColor = mode === "design" ? "text-amber-400" : mode === "run" ? "text-purple-300" : "text-gray-600";
 
   return (
-    <div className={`shrink-0 border-b ${borderColor} bg-gray-950 px-4 py-2`}>
-      {/* Narration row */}
-      <div className="flex items-start gap-2 mb-2">
-        <span className={`mt-1 h-2 w-2 rounded-full shrink-0 ${dotColor}`} />
-        <div className="flex-1 min-w-0">
-          <div className="text-white text-xs font-semibold truncate">{narration}</div>
-          {narrationSub && (
-            <div className="text-gray-500 text-xs truncate mt-0.5">{narrationSub}</div>
-          )}
+    <div className={`shrink-0 px-4 py-3 ${stripBg} ${stripBorder}`}>
+      {/* Narration */}
+      <div className="flex items-start justify-between gap-3 mb-2">
+        <div className="flex items-start gap-2 min-w-0">
+          <span className={`mt-1 h-2.5 w-2.5 rounded-full shrink-0 ${dotColor}`} />
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-white leading-tight">
+              {narration}
+              {narrationHighlight && (
+                <span className="text-amber-400 mx-1">{narrationHighlight}</span>
+              )}
+            </div>
+            {narrationSub && (
+              <div className="text-gray-500 text-xs mt-0.5">{narrationSub}</div>
+            )}
+          </div>
         </div>
         {total > 0 && (
-          <div className="text-gray-500 text-xs shrink-0 ml-2">
+          <div className={`text-sm font-bold shrink-0 ${countColor}`}>
             {done} / {total} {mode === "design" ? "approved" : mode === "run" ? "done" : ""}
           </div>
         )}
       </div>
 
       {/* Progress bar */}
-      <div className="h-1 bg-gray-800 rounded-full mb-2">
+      <div className="h-1.5 bg-gray-800 rounded-full mb-2.5">
         <div
-          className={`h-1 rounded-full transition-all duration-500 ${barColor}`}
+          className={`h-1.5 rounded-full transition-all duration-700 ${barColor}`}
           style={{ width: `${progress}%` }}
         />
       </div>
@@ -98,16 +102,13 @@ export function ProgressStrip({
           {pills.map((p, i) => (
             <div
               key={p.id}
-              data-active={
-                p.state === "active-design" || p.state === "active-run" ? "true" : undefined
-              }
-              className={`flex items-center gap-1 border rounded px-2 py-0.5 text-xs whitespace-nowrap shrink-0 ${STATE_PILL[p.state]}`}
+              data-active={p.state === "active-design" || p.state === "active-run" ? "true" : undefined}
+              className={`flex items-center gap-1.5 border rounded-full px-3 py-1 text-xs whitespace-nowrap shrink-0 font-mono ${STATE_PILL[p.state]}`}
             >
               <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${STATE_DOT[p.state]}`} />
-              <span>
-                {i + 1}. {p.label}
-              </span>
-              {p.detail && <span className="opacity-60 text-xs">{p.detail}</span>}
+              {i + 1}. {p.label}
+              {p.detail && <span className="opacity-70">{p.detail}</span>}
+              {p.state === "done" && <span className="text-green-400">✓</span>}
             </div>
           ))}
         </div>
