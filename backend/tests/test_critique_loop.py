@@ -79,7 +79,7 @@ async def test_critique_loop_escalates_after_5_iterations():
     producer_agent.revise = AsyncMock(return_value=agent)
 
     with patch.object(critique_agent, "_call_llm", new_callable=AsyncMock, return_value=needs_revision):
-        result, final_agent, iterations = await run_critique_loop(
+        result, agents, iterations = await run_critique_loop(
             agent, critique_agent, producer_agent, phase="design_time"
         )
 
@@ -90,6 +90,7 @@ async def test_critique_loop_escalates_after_5_iterations():
         CritiqueVerdict.ESCALATE_RETHINK,
         CritiqueVerdict.ESCALATE_USER,
     ]
+    assert len(agents) == 1
 
 
 @pytest.mark.asyncio
@@ -122,13 +123,13 @@ async def test_critique_loop_exits_on_approval():
     producer_agent.revise = AsyncMock(return_value=agent)
 
     with patch.object(critique_agent, "_call_llm", new_callable=AsyncMock, return_value=approved_response):
-        result, final_agent, iterations = await run_critique_loop(
+        result, agents, iterations = await run_critique_loop(
             agent, critique_agent, producer_agent, phase="design_time"
         )
 
     assert iterations == 1
     assert result.verdict == CritiqueVerdict.APPROVED
-    assert final_agent.quality_score == 8.5
+    assert agents[0].quality_score == 8.5
 
 
 @pytest.mark.asyncio
