@@ -32,12 +32,12 @@ async def stream_llm_json(
             full += delta
             token_count += 1  # each chunk ≈ 1 token (good enough for UI display)
             if on_event and token_count - last_reported >= 40:
-                await on_event("LLM_STREAM", {"context": context, "tokens": token_count})
+                await on_event("LLM_STREAM", {"context": context, "tokens": token_count, "text": full[-300:]})
                 last_reported = token_count
 
     # Final flush
     if on_event and token_count > last_reported:
-        await on_event("LLM_STREAM", {"context": context, "tokens": token_count})
+        await on_event("LLM_STREAM", {"context": context, "tokens": token_count, "text": full[-300:]})
 
     if not full.strip():
         raise ValueError(f"LLM returned empty response for context: {context}")

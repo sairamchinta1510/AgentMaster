@@ -54,7 +54,7 @@ export type DesignWSEvent =
   | { type: "CRITIQUE_COMPLETE"; pipeline_id: string; agent_id: string; iterations: number; verdict: CritiqueVerdict; quality_score: number; critique: CritiqueResult }
   | { type: "AGENT_STATE_CHANGE"; pipeline_id: string; agent_id: string; state: AgentState }
   | { type: "DESIGN_COMPLETE"; pipeline_id: string; message: string; agent_count: number; approved_count: number; input_schema: InputField[] }
-  | { type: "LLM_STREAM"; pipeline_id: string; context: string; tokens: number }
+  | { type: "LLM_STREAM"; pipeline_id: string; context: string; tokens: number; text?: string }
   | { type: "ERROR"; pipeline_id: string; message: string };
 
 export type RunWSEvent =

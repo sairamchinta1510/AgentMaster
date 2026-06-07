@@ -32,9 +32,13 @@ export function useDesignWS(pipelineId: string | null, trigger: number = -1) {
           store.setPhase(event.phase);
           store.setPhaseMessage(event.message);
           store.setLlmTokens(0); // reset counter on each new LLM phase
+          store.setLlmStreamText("");
           break;
         case "LLM_STREAM":
           store.setLlmTokens(event.tokens as number);
+          if (event.text) {
+            store.setLlmStreamText(event.text);
+          }
           break;
         case "DAG_BUILT":
           store.setDAG(event.dag);
