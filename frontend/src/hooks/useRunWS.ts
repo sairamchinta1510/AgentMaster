@@ -37,6 +37,13 @@ export function useRunWS(runId: string | null) {
           store.setComplete(true);
           for (const r of event.results) store.upsertResult(r);
           break;
+        case "CODE_STATUS":
+          store.setCodeStatus(event.agent_id, {
+            phase: event.phase,
+            elapsed_ms: event.elapsed_ms,
+            code_preview: event.code_preview,
+          });
+          break;
         default:
           break;
       }

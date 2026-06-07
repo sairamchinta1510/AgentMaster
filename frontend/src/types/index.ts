@@ -1,5 +1,11 @@
 // ── V2 types ────────────────────────────────────────────────────────────────
 
+export interface TriggerConfig {
+  mode: "manual" | "scheduled" | "webhook";
+  interval_minutes: number | null;
+  description: string;
+}
+
 export interface InputField {
   name: string;
   type: "string" | "url" | "credential" | "file" | "selection";
@@ -13,6 +19,8 @@ export interface Pipeline {
   name: string;
   input_schema: InputField[];
   blueprint: Record<string, unknown>;
+  default_inputs?: Record<string, string>;
+  trigger_config?: TriggerConfig | null;
   created_at: string | null;
   updated_at: string | null;
 }
@@ -22,6 +30,7 @@ export interface PipelineSummary {
   objective: string;
   name: string;
   agent_count: number;
+  trigger_config?: TriggerConfig | null;
   created_at: string | null;
 }
 
@@ -62,6 +71,7 @@ export type RunWSEvent =
   | { type: "AGENT_STARTED"; run_id: string; agent_id: string; agent_name: string }
   | { type: "AGENT_RESULT"; run_id: string; agent_id: string; agent_name: string; status: string; output: Record<string, unknown>; error: string | null; duration_ms: number | null }
   | { type: "RUN_COMPLETE"; run_id: string; status: string; total_agents: number; completed: number; failed: number; results: AgentResult[] }
+  | { type: "CODE_STATUS"; run_id: string; agent_id: string; phase: "planning" | "executing" | "synthesising" | "fallback"; elapsed_ms: number; code_preview: string | null }
   | { type: "ERROR"; run_id: string; message: string };
 
 // ── V1 types (kept for existing components) ─────────────────────────────────

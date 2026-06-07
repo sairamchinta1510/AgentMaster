@@ -60,18 +60,26 @@ export const useDesignStore = create<DesignStore>((set) => ({
 
 // ── Run-time store ───────────────────────────────────────────────────────────
 
+export interface CodeStatus {
+  phase: "planning" | "executing" | "synthesising" | "fallback";
+  elapsed_ms: number;
+  code_preview: string | null;
+}
+
 interface RunStore {
   run: Run | null;
   activeResults: Record<string, AgentResult>;
   runEvents: RunWSEvent[];
   isConnected: boolean;
   isComplete: boolean;
+  codeStatus: Record<string, CodeStatus>;
 
   setRun: (r: Run | null) => void;
   upsertResult: (r: AgentResult) => void;
   addRunEvent: (e: RunWSEvent) => void;
   setConnected: (v: boolean) => void;
   setComplete: (v: boolean) => void;
+  setCodeStatus: (agentId: string, status: CodeStatus) => void;
   reset: () => void;
 }
 
@@ -81,6 +89,7 @@ export const useRunStore = create<RunStore>((set) => ({
   runEvents: [],
   isConnected: false,
   isComplete: false,
+  codeStatus: {},
 
   setRun: (r) => set({ run: r }),
   upsertResult: (r) =>
@@ -88,6 +97,8 @@ export const useRunStore = create<RunStore>((set) => ({
   addRunEvent: (e) => set((s) => ({ runEvents: [...s.runEvents, e].slice(-500) })),
   setConnected: (v) => set({ isConnected: v }),
   setComplete: (v) => set({ isComplete: v }),
+  setCodeStatus: (agentId, status) =>
+    set((s) => ({ codeStatus: { ...s.codeStatus, [agentId]: status } })),
   reset: () =>
-    set({ run: null, activeResults: {}, runEvents: [], isConnected: false, isComplete: false }),
+    set({ run: null, activeResults: {}, runEvents: [], isConnected: false, isComplete: false, codeStatus: {} }),
 }));
