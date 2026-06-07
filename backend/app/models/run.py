@@ -34,3 +34,4 @@ class RunORM(Base):
     results = Column(JSON, default=list)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     completed_at = Column(DateTime(timezone=True), nullable=True)
+    triggered_by = Column(String, default="manual")  # "manual" | "schedule" | "webhook"

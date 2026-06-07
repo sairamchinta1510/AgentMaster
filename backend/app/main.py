@@ -5,6 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from app.config import settings
 from app.api.routes import pipelines, runs
+from app.api.webhooks import router as webhooks_router
 from app.api.ws_design import ws_design_handler
 from app.api.ws_run import ws_run_handler
 from app.api.ws_extend import ws_extend_handler
@@ -18,9 +19,14 @@ import app.models.run  # noqa: F401
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    restore_from_gcs()          # download DB from GCS before creating tables
+    restore_from_gcs()
     Base.metadata.create_all(bind=engine)
+    from app.scheduler import get_scheduler, load_all_schedules
+    scheduler = get_scheduler()
+    scheduler.start()
+    load_all_schedules()
     yield
+    scheduler.shutdown(wait=False)
 
 
 app = FastAPI(
@@ -40,6 +46,7 @@ app.add_middleware(
 
 app.include_router(pipelines.router)
 app.include_router(runs.router)
+app.include_router(webhooks_router)
 
 
 @app.websocket("/ws/design/{pipeline_id}")
