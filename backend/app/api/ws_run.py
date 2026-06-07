@@ -1,4 +1,5 @@
 import logging
+import time
 from datetime import datetime, timezone
 from fastapi import WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
@@ -75,6 +76,7 @@ async def ws_run_handler(websocket: WebSocket, run_id: str):
         executor = AgentExecutorAgent()
         results = []
         context: dict = dict(run.inputs or {})
+        start_ms = int(time.time() * 1000)
 
         for agent_spec in ordered_agents:
             await send(
@@ -85,7 +87,18 @@ async def ws_run_handler(websocket: WebSocket, run_id: str):
                 },
             )
 
-            result = await executor.execute(agent_spec, context)
+            async def _on_code_event(agent_id: str, phase: str, code_preview: str | None):
+                await send(
+                    "CODE_STATUS",
+                    {
+                        "agent_id": agent_id,
+                        "phase": phase,
+                        "elapsed_ms": int(time.time() * 1000) - start_ms,
+                        "code_preview": code_preview,
+                    },
+                )
+
+            result = await executor.execute(agent_spec, context, on_code_event=_on_code_event)
             results.append(result)
             context.update(result.output)
 
