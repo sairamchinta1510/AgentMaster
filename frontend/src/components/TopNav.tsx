@@ -1,55 +1,87 @@
-import { useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { listPipelines } from "../api/client";
-import { usePipelineStore } from "../store/pipelineStore";
+import { useNavigate, useLocation, useParams } from "react-router-dom";
+import { useDesignStore, useRunStore } from "../store/runStore";
 
 export function TopNav() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { pipelineId } = useParams<{ pipelineId?: string }>();
-  const { pipelines, setPipelines } = usePipelineStore();
+  const { llmTokens, phase, isConnected: designConnected, isComplete: designComplete } = useDesignStore();
+  const { isConnected: runConnected, isComplete: runComplete, activeResults } = useRunStore();
 
-  useEffect(() => {
-    listPipelines()
-      .then((r) => setPipelines(r.data))
-      .catch(() => {});
-  }, [setPipelines]);
+  const isDesignRoute = location.pathname.startsWith("/design/");
+  const isRunRoute = location.pathname.startsWith("/run/");
+  const isPipelinesRoute = !isDesignRoute && !isRunRoute;
+
+  const canDesign = !!pipelineId;
+  const canRun = !!pipelineId;
+
+  const isDesigning = designConnected && !designComplete;
+  const isRunning = runConnected && !runComplete;
+  const doneRunCount = Object.values(activeResults).filter((r) => r.status === "completed").length;
+  const totalRunCount = Object.keys(activeResults).length;
+
+  function tabCls(active: boolean, disabled: boolean, accent: string) {
+    if (disabled) return "px-4 h-full flex items-center text-xs font-mono text-gray-700 cursor-not-allowed select-none";
+    return `px-4 h-full flex items-center text-xs font-mono transition-colors cursor-pointer ${
+      active
+        ? `border-b-2 ${accent} font-bold`
+        : "text-gray-500 hover:text-gray-200"
+    }`;
+  }
 
   return (
-    <div className="shrink-0 h-10 bg-[#080c16] border-b border-gray-800/60 flex items-center px-5 gap-4 z-10">
+    <div className="shrink-0 h-10 bg-[#080c16] border-b border-gray-800/60 flex items-center z-10">
       <button
-        className="text-cyan-400 font-bold text-sm font-mono flex items-center gap-1.5 hover:text-cyan-300 transition-colors shrink-0"
+        className="px-4 h-full flex items-center text-cyan-400 font-bold text-sm font-mono hover:text-cyan-300 transition-colors shrink-0 border-r border-gray-800/60"
         onClick={() => navigate("/")}
       >
-        ⬡ <span className="tracking-wide">AgentMaster</span>
+        ⬡
       </button>
-      <div className="w-px h-5 bg-gray-800 shrink-0" />
-      <div className="flex items-center gap-2 min-w-0">
-        {pipelines.length > 0 ? (
-          <select
-            className="bg-transparent border-0 text-gray-400 text-xs font-mono focus:outline-none cursor-pointer max-w-sm hover:text-gray-200 transition-colors"
-            value={pipelineId ?? ""}
-            onChange={(e) => {
-              if (e.target.value) navigate(`/design/${e.target.value}`);
-            }}
-          >
-            <option value="">— select pipeline —</option>
-            {pipelines.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <span className="text-gray-700 text-xs font-mono">No pipelines yet</span>
+
+      <div className="flex h-full items-stretch">
+        <button
+          className={tabCls(isPipelinesRoute, false, "border-b-cyan-400 text-cyan-300")}
+          onClick={() => navigate("/")}
+        >
+          ☰ Pipelines
+        </button>
+
+        <button
+          className={tabCls(isDesignRoute, !canDesign, "border-b-orange-400 text-orange-300")}
+          onClick={() => canDesign && navigate(`/design/${pipelineId}`)}
+          title={!canDesign ? "Select a pipeline first" : undefined}
+        >
+          ✏ Design
+          {isDesigning && (
+            <span className="ml-1.5 h-1.5 w-1.5 rounded-full bg-orange-400 animate-pulse inline-block" />
+          )}
+        </button>
+
+        <button
+          className={tabCls(isRunRoute, !canRun, "border-b-green-400 text-green-300")}
+          onClick={() => canRun && navigate(`/run/${pipelineId}`)}
+          title={!canRun ? "Select a pipeline first" : undefined}
+        >
+          ▶ Run
+          {isRunning && (
+            <span className="ml-1.5 h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse inline-block" />
+          )}
+        </button>
+      </div>
+
+      <div className="flex-1" />
+      <div className="px-4 flex items-center gap-3 text-xs font-mono">
+        {isDesigning && llmTokens > 0 && (
+          <span className="bg-amber-900/40 border border-amber-700/50 text-amber-300 px-2 py-0.5 rounded">
+            🟡 {phase} · {llmTokens.toLocaleString()} tokens
+          </span>
+        )}
+        {isRunning && totalRunCount > 0 && (
+          <span className="bg-green-900/40 border border-green-700/50 text-green-300 px-2 py-0.5 rounded">
+            ▶ {doneRunCount}/{totalRunCount} agents
+          </span>
         )}
       </div>
-      <div className="flex-1" />
-      <button
-        className="bg-cyan-800/80 hover:bg-cyan-700 text-cyan-200 text-xs font-bold px-3 py-1.5 rounded-lg font-mono transition-colors border border-cyan-700/50"
-        onClick={() => navigate("/")}
-      >
-        ✏ New Pipeline
-      </button>
     </div>
   );
 }

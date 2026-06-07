@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { TopNav } from "./components/TopNav";
-import { NewPipelinePage } from "./pages/NewPipelinePage";
+import { PipelinesPage } from "./pages/PipelinesPage";
 import { DesignPage } from "./pages/DesignPage";
 import { RunPage } from "./pages/RunPage";
 
@@ -19,7 +19,7 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<AppShell><NewPipelinePage /></AppShell>} />
+        <Route path="/" element={<AppShell><PipelinesPage /></AppShell>} />
         <Route path="/design/new" element={<Navigate to="/" replace />} />
         <Route path="/design/:pipelineId" element={<AppShell><DesignPage /></AppShell>} />
         <Route path="/run/:pipelineId" element={<AppShell><RunPage /></AppShell>} />
