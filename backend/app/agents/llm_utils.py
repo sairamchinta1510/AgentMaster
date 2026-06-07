@@ -7,17 +7,19 @@ logger = logging.getLogger(__name__)
 
 
 def _repair_json_escapes(text: str) -> str:
-    r"""Fix invalid backslash escapes in LLM-generated JSON.
+    r"""Fix invalid content in LLM-generated JSON strings.
 
-    LLMs sometimes emit bare backslashes (e.g. regex \w, Windows paths C:\Users)
-    inside JSON strings. These are invalid per the JSON spec and cause
-    json.loads to raise JSONDecodeError: Invalid \escape.
+    Handles two classes of problems:
+    1. Bare backslashes (e.g. \w, C:\Users) — escaped to \\
+    2. Literal control characters inside strings (e.g. real newline 0x0A, tab 0x09)
+       — replaced with their JSON escape sequences (\n, \t, etc.)
 
-    Uses a state-machine scanner so already-valid escape sequences (e.g. \\, \n,
-    \uXXXX) are never double-escaped.
+    Uses a state-machine scanner so already-valid escape sequences (\\, \n, \uXXXX)
+    are never double-escaped.
     """
     HEX = frozenset('0123456789abcdefABCDEF')
     VALID_SINGLE = frozenset('"\\' + '/bfnrt')
+    CONTROL_ESCAPES = {'\n': '\\n', '\r': '\\r', '\t': '\\t', '\b': '\\b', '\f': '\\f'}
 
     result = []
     i = 0
@@ -51,6 +53,10 @@ def _repair_json_escapes(text: str) -> str:
         elif c == '"':
             in_string = False
             result.append(c)
+            i += 1
+        elif c in CONTROL_ESCAPES:
+            # Literal control character inside a JSON string — escape it
+            result.append(CONTROL_ESCAPES[c])
             i += 1
         else:
             result.append(c)
