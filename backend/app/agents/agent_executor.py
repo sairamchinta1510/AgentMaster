@@ -5,26 +5,55 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+import httpx
 from openai import AsyncOpenAI
 
 from app.agents.code_executor import execute_python_code
 from app.agents.code_reviewer import review_and_fix_code
+from app.agents.llm_utils import _repair_json_escapes
 from app.config import settings
 from app.models.run import AgentResult
 
 logger = logging.getLogger(__name__)
 
+MIN_EXEC_ITERATIONS = 3   # always run PLAN→REVIEW→EXEC at least this many times
+MAX_EXEC_RETRIES_ON_ERROR = 5  # extra retries when execution fails
+
 
 def _parse_llm_json(raw: str) -> dict:
-    """Strip markdown code fences then parse JSON. Gemini often wraps output in ```json ... ```."""
+    """Strip markdown fences, repair escape sequences, then parse JSON."""
     text = raw.strip()
     if text.startswith("```"):
-        # Remove opening fence (```json or ```)
         text = text.split("\n", 1)[1] if "\n" in text else text[3:]
-        # Remove closing fence
         if text.rstrip().endswith("```"):
             text = text.rstrip()[:-3].rstrip()
+    text = _repair_json_escapes(text)
     return json.loads(text)
+
+
+async def _search_error_solutions(error: str) -> str:
+    """Query DuckDuckGo for solutions to a Python error. Returns a short snippet or ''."""
+    try:
+        query = f"python {error[:120]} fix solution"
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.get(
+                "https://api.duckduckgo.com/",
+                params={"q": query, "format": "json", "no_html": "1", "no_redirect": "1"},
+            )
+            data = r.json()
+            snippets = []
+            abstract = data.get("Abstract", "").strip()
+            if abstract:
+                snippets.append(abstract)
+            for topic in data.get("RelatedTopics", [])[:3]:
+                if isinstance(topic, dict) and topic.get("Text"):
+                    snippets.append(topic["Text"])
+            result = "\n".join(snippets[:3])
+            logger.info("Web search for error returned %d snippet(s)", len(snippets))
+            return result
+    except Exception as exc:
+        logger.debug("Web search failed (%s); continuing without web context", exc)
+        return ""
 
 
 def _make_llm_client() -> tuple[AsyncOpenAI, str]:
@@ -216,22 +245,20 @@ class AgentExecutorAgent:
 
             # ── EXEC phase ───────────────────────────────────────────────────
             code = plan.get("code", "")
-            credential_keys = plan.get("credential_keys", [])
 
             # Inject ALL context inputs as uppercased env vars so generated code
             # can read any input (paths, URLs, names, credentials) via os.environ.
-            # e.g. context_inputs["repository_path"] -> os.environ["REPOSITORY_PATH"]
             env_vars: dict[str, str] = {
                 k.upper(): str(v)
                 for k, v in context_inputs.items()
                 if not k.startswith("_") and v is not None
             }
 
-            MAX_RETRIES = 3
             last_error: str = ""
             plan_prompt_base = plan_prompt  # keep for retry re-plan
+            succeeded = False
 
-            for attempt in range(1, MAX_RETRIES + 1):
+            for attempt in range(1, MAX_EXEC_RETRIES_ON_ERROR + 1):
                 code_preview = code[:200] if code else None
 
                 # ── REVIEW phase ─────────────────────────────────────────────
@@ -248,23 +275,41 @@ class AgentExecutorAgent:
                 await emit("executing", code[:200] if code else None)
                 stdout, stderr, returncode = await execute_python_code(code, env_vars)
 
-                if returncode == 0:
-                    break  # success
+                # Always run at least MIN_EXEC_ITERATIONS even on success
+                if returncode == 0 and attempt >= MIN_EXEC_ITERATIONS:
+                    succeeded = True
+                    break
+                elif returncode == 0:
+                    # Success but haven't hit minimum iterations — re-critique the output
+                    logger.info(
+                        "[%s] attempt %d succeeded but below min iterations (%d), running critique pass",
+                        agent_id, attempt, MIN_EXEC_ITERATIONS,
+                    )
+                    # Continue loop with same code for self-critique pass
+                    last_error = ""
+                    continue
 
-                # Execution failed — retry with error context injected into re-plan
+                # Execution failed — search web + retry with enriched error context
                 last_error = stderr or stdout or f"Exit code {returncode}"
                 logger.warning(
                     "[%s] attempt %d/%d failed: %s",
-                    agent_id, attempt, MAX_RETRIES, last_error[:200],
+                    agent_id, attempt, MAX_EXEC_RETRIES_ON_ERROR, last_error[:200],
                 )
 
-                if attempt < MAX_RETRIES:
-                    await emit("planning")  # signal UI we're re-planning
+                if attempt < MAX_EXEC_RETRIES_ON_ERROR:
+                    # Search the web for solutions to this error
+                    web_context = await _search_error_solutions(last_error)
+                    web_section = (
+                        f"\n\nWEB SEARCH RESULTS FOR THIS ERROR:\n{web_context}\n"
+                        if web_context else ""
+                    )
+                    await emit("planning")
                     retry_prompt = (
                         plan_prompt_base
-                        + f"\n\nPREVIOUS ATTEMPT FAILED (attempt {attempt}/{MAX_RETRIES}):\n"
-                        + f"Error:\n{last_error[:500]}\n\n"
-                        + "Fix the code and try again. Do NOT repeat the same mistake."
+                        + f"\n\nPREVIOUS ATTEMPT FAILED (attempt {attempt}/{MAX_EXEC_RETRIES_ON_ERROR}):\n"
+                        + f"Error:\n{last_error[:500]}\n"
+                        + web_section
+                        + "\nFix the code using the above context. Do NOT repeat the same mistake."
                     )
                     retry_response = await self.client.chat.completions.create(
                         model=self.model,
@@ -277,10 +322,10 @@ class AgentExecutorAgent:
                     )
                     retry_plan = _parse_llm_json(retry_response.choices[0].message.content)
                     code = retry_plan.get("code", code)
-            else:
-                # All retries exhausted
+
+            if not succeeded and returncode != 0:
                 raise RuntimeError(
-                    f"Agent failed after {MAX_RETRIES} attempts. Last error: {last_error[:300]}"
+                    f"Agent failed after {MAX_EXEC_RETRIES_ON_ERROR} attempts. Last error: {last_error[:300]}"
                 )
 
             # ── SYNTH phase ──────────────────────────────────────────────────

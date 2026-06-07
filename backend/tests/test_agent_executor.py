@@ -100,6 +100,8 @@ async def test_retries_on_exec_failure_and_succeeds():
     synth = MagicMock()
     synth.choices[0].message.content = '{"result": "fixed"}'
 
+    # plan_fail (initial), plan_ok (retry after failure), synth (final)
+    # MIN_EXEC_ITERATIONS=3: exec runs 3x (fail, ok, ok) — no extra plan calls
     responses = [plan_fail, plan_ok, synth]
     call_count = 0
 
@@ -109,7 +111,7 @@ async def test_retries_on_exec_failure_and_succeeds():
         call_count += 1
         return r
 
-    exec_results = [("", "RuntimeError: oops", 1), ("fixed\n", "", 0)]
+    exec_results = [("", "RuntimeError: oops", 1), ("fixed\n", "", 0), ("fixed\n", "", 0)]
     exec_count = 0
 
     async def mock_exec(code, env):
