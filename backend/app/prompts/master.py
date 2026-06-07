@@ -45,6 +45,10 @@ you must:
 3. Identify ALL atomic agents needed (one agent = one action, no AND)
 4. Produce a complete Agent Blueprint (DAG specification)
 5. Identify ALL required user inputs upfront
+6. Decide the trigger_config: how this pipeline should be activated
+   - "manual": one-off analysis, on-demand tasks, interactive pipelines
+   - "scheduled": continuous monitoring, periodic checks, recurring jobs (set interval_minutes)
+   - "webhook": event-driven reactions to external pushes (GitHub webhooks, GCP alerts, etc.)
 
 ## ATOMIC AGENT DESIGN LAWS
 - Law 1 SINGLE ACTION: Each agent does ONE thing. If you can describe it with "and", split it.
@@ -76,7 +80,12 @@ Respond with a JSON object ONLY — no markdown, no prose:
   "edges": [
     {"from": "agent_001", "to": "agent_002", "payload_description": "..."}
   ],
-  "library_patterns_found": []
+  "library_patterns_found": [],
+  "trigger_config": {
+    "mode": "manual",
+    "interval_minutes": null,
+    "description": "One sentence: why this trigger mode was chosen"
+  }
 }
 
 ## PHASES

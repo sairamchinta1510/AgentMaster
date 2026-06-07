@@ -18,6 +18,8 @@ class Pipeline(BaseModel):
     name: str
     input_schema: list[InputField] = Field(default_factory=list)
     blueprint: dict[str, Any] = Field(default_factory=dict)
+    default_inputs: dict[str, str] = Field(default_factory=dict)
+    trigger_config: dict | None = None
     created_at: str | None = None
     updated_at: str | None = None
 
@@ -27,6 +29,7 @@ class PipelineSummary(BaseModel):
     objective: str
     name: str
     agent_count: int = 0
+    trigger_config: dict | None = None
     created_at: str | None = None
 
 
@@ -38,5 +41,6 @@ class PipelineORM(Base):
     name = Column(String, nullable=False)
     input_schema = Column(JSON, default=list)
     blueprint = Column(JSON, default=dict)
+    default_inputs = Column(JSON, default=dict)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

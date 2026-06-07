@@ -20,6 +20,10 @@ class ExtendPipelineRequest(BaseModel):
     extension_objective: str
 
 
+class UpdateCredentialsRequest(BaseModel):
+    default_inputs: dict[str, str]
+
+
 @router.post("", status_code=201, response_model=Pipeline)
 def create_pipeline(req: CreatePipelineRequest, db: Session = Depends(get_db)):
     pipeline_id = str(uuid.uuid4())
@@ -83,6 +87,18 @@ async def suggest_extensions(pipeline_id: str, req: ExtendPipelineRequest, db: S
     return result
 
 
+@router.patch("/{pipeline_id}/credentials", response_model=Pipeline)
+def update_credentials(pipeline_id: str, req: UpdateCredentialsRequest, db: Session = Depends(get_db)):
+    row = db.query(PipelineORM).filter(PipelineORM.id == pipeline_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Pipeline not found")
+    row.default_inputs = req.default_inputs
+    db.commit()
+    db.refresh(row)
+    backup_to_gcs()
+    return _orm_to_pipeline(row)
+
+
 @router.delete("/{pipeline_id}", status_code=204)
 def delete_pipeline(pipeline_id: str, db: Session = Depends(get_db)):
     row = db.query(PipelineORM).filter(PipelineORM.id == pipeline_id).first()
@@ -94,12 +110,15 @@ def delete_pipeline(pipeline_id: str, db: Session = Depends(get_db)):
 
 
 def _orm_to_pipeline(row: PipelineORM) -> Pipeline:
+    blueprint = row.blueprint or {}
     return Pipeline(
         id=row.id,
         objective=row.objective,
         name=row.name,
         input_schema=row.input_schema or [],
-        blueprint=row.blueprint or {},
+        blueprint=blueprint,
+        default_inputs=row.default_inputs or {},
+        trigger_config=blueprint.get("trigger_config"),
         created_at=str(row.created_at) if row.created_at else None,
         updated_at=str(row.updated_at) if row.updated_at else None,
     )
@@ -113,5 +132,6 @@ def _orm_to_summary(row: PipelineORM) -> PipelineSummary:
         objective=row.objective,
         name=row.name,
         agent_count=agent_count,
+        trigger_config=blueprint.get("trigger_config"),
         created_at=str(row.created_at) if row.created_at else None,
     )
