@@ -290,6 +290,19 @@ export function DesignPage() {
 
   const isWorking = isConnected && !isComplete;
 
+  let triggerChip: React.ReactNode = null;
+  if (isComplete && activePipeline?.blueprint?.trigger_config) {
+    const tc = activePipeline.blueprint.trigger_config as { mode?: string; interval_minutes?: number };
+    if (tc.mode && tc.mode !== "manual") {
+      triggerChip = (
+        <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-purple-900/30 border border-purple-700/30 text-purple-300 font-mono">
+          {tc.mode === "scheduled" && `⏱ Every ${tc.interval_minutes ?? 5}m`}
+          {tc.mode === "webhook" && "📡 Webhook"}
+        </span>
+      );
+    }
+  }
+
   return (
     <div className="flex flex-col h-full bg-[#0a0e1a] text-white overflow-hidden">
       {/* Context bar */}
@@ -302,6 +315,7 @@ export function DesignPage() {
           <span className="text-gray-500 text-xs font-mono truncate" title={activePipeline?.objective}>
             {activePipeline?.objective || "Loading…"}
           </span>
+          {triggerChip}
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <button

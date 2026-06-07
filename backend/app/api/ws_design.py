@@ -119,6 +119,16 @@ async def ws_design_handler(websocket: WebSocket, pipeline_id: str):
         db.commit()
         backup_to_gcs()
 
+        # Register or unregister schedule based on trigger_config
+        trigger = blueprint.get("trigger_config", {})
+        if trigger.get("mode") == "scheduled":
+            from app.scheduler import register_pipeline_schedule
+            interval = int(trigger.get("interval_minutes") or 5)
+            register_pipeline_schedule(pipeline_id, interval)
+        else:
+            from app.scheduler import unregister_pipeline_schedule
+            unregister_pipeline_schedule(pipeline_id)
+
         await send(
             "DESIGN_COMPLETE",
             {
