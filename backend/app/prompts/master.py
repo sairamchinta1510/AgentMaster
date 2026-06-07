@@ -144,6 +144,8 @@ def get_extend_prompt(existing_agents: list, extension_objective: str) -> str:
 {extension_objective}
 """
 
+
+def get_master_prompt(phase: str, objective: str, library_context: str = "") -> str:
     lib_section = (
         library_context
         if library_context
@@ -156,4 +158,3 @@ def get_extend_prompt(existing_agents: list, extension_objective: str) -> str:
 ## AGENT LIBRARY CONTEXT:
 {lib_section}
 """
-
