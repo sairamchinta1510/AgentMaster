@@ -1,24 +1,39 @@
 import axios from "axios";
+import type { Pipeline, PipelineSummary, Run } from "../types";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8001";
+const API_BASE = import.meta.env.VITE_API_URL ?? (import.meta.env.PROD ? "" : "http://localhost:8000");
+const WS_BASE = (import.meta.env.VITE_WS_URL as string | undefined) ??
+  (import.meta.env.PROD
+    ? `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}`
+    : "ws://localhost:8000");
 
 export const api = axios.create({ baseURL: API_BASE });
 
-export const createSession = (objective: string) =>
-  api.post<{ session_id: string; phase: string; objective: string }>("/api/sessions", {
-    objective,
-  });
+// ── WebSocket URL helper ─────────────────────────────────────────────────────
 
-export const getSession = (sessionId: string) =>
-  api.get(`/api/sessions/${sessionId}`);
+export const wsUrl = (path: string): string => `${WS_BASE}${path}`;
 
-export const listLibrary = () =>
-  api.get<{ id: string; name: string; domain: string; quality_score: number; objective: string }[]>(
-    "/api/library"
-  );
+// ── Pipelines ────────────────────────────────────────────────────────────────
 
-export const searchLibrary = (q: string) =>
-  api.get(`/api/library/search?q=${encodeURIComponent(q)}`);
+export const createPipeline = (objective: string, name?: string) =>
+  api.post<Pipeline>("/api/pipelines", { objective, name: name || "" });
 
-export const provideInput = (sessionId: string, inputName: string, value: string) =>
-  api.post(`/api/sessions/${sessionId}/input`, { input_name: inputName, value });
+export const listPipelines = () =>
+  api.get<PipelineSummary[]>("/api/pipelines");
+
+export const getPipeline = (id: string) =>
+  api.get<Pipeline>(`/api/pipelines/${id}`);
+
+export const deletePipeline = (id: string) =>
+  api.delete(`/api/pipelines/${id}`);
+
+// ── Runs ─────────────────────────────────────────────────────────────────────
+
+export const createRun = (pipeline_id: string, inputs: Record<string, string>) =>
+  api.post<Run>("/api/runs", { pipeline_id, inputs });
+
+export const getRun = (run_id: string) =>
+  api.get<Run>(`/api/runs/${run_id}`);
+
+export const listRunsForPipeline = (pipeline_id: string) =>
+  api.get<Run[]>(`/api/runs/by-pipeline/${pipeline_id}`);

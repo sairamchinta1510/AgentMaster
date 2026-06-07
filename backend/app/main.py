@@ -1,10 +1,13 @@
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from app.config import settings
 from app.api.routes import pipelines, runs
 from app.api.ws_design import ws_design_handler
 from app.api.ws_run import ws_run_handler
 from app.db import Base, engine
+import os
 
 import app.models.pipeline  # noqa: F401
 import app.models.run  # noqa: F401
@@ -42,3 +45,15 @@ async def ws_run(ws: WebSocket, run_id: str):
 @app.get("/health", tags=["system"])
 def health():
     return {"status": "ok", "version": "2.0.0"}
+
+
+# Serve built frontend (production) — must be last
+_static_dir = os.path.join(os.path.dirname(__file__), "..", "static")
+if os.path.isdir(_static_dir):
+    _assets_dir = os.path.join(_static_dir, "assets")
+    if os.path.isdir(_assets_dir):
+        app.mount("/assets", StaticFiles(directory=_assets_dir), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa_fallback(full_path: str):
+        return FileResponse(os.path.join(_static_dir, "index.html"))
