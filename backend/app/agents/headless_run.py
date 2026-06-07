@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 async def execute_run_headless(run_id: str) -> None:
     """Execute a pipeline run without WebSocket — updates DB only."""
     db = SessionLocal()
+    run = None  # Guard against UnboundLocalError if DB query fails
     try:
         run = db.query(RunORM).filter(RunORM.id == run_id).first()
         if not run:
@@ -59,10 +60,11 @@ async def execute_run_headless(run_id: str) -> None:
 
     except Exception as exc:
         logger.error("Headless run %s failed: %s", run_id, exc, exc_info=True)
-        try:
-            run.status = "failed"
-            db.commit()
-        except Exception as commit_exc:
-            logger.error("Failed to mark run %s as failed: %s", run_id, commit_exc)
+        if run:
+            try:
+                run.status = "failed"
+                db.commit()
+            except Exception as commit_exc:
+                logger.error("Failed to mark run %s as failed: %s", run_id, commit_exc)
     finally:
         db.close()

@@ -6,15 +6,23 @@ from pathlib import Path
 MAX_STDOUT_BYTES = 50 * 1024   # 50 KB
 EXEC_TIMEOUT_SECONDS = 60
 
+# Build minimal subprocess env — only what Python needs to run
+# Never expose server secrets (GEMINI_API_KEY, DATABASE_URL, etc.)
+_SAFE_ENV_KEYS = {
+    "PATH", "HOME", "USER", "TMPDIR", "TEMP", "TMP",
+    "PYTHONPATH", "PYTHONHOME", "LANG", "LC_ALL",
+    "SYSTEMROOT", "SYSTEMDRIVE",  # Windows
+}
+
 
 async def execute_python_code(
     code: str,
     env_vars: dict[str, str],
 ) -> tuple[str, str, int]:
     """
-    Write code to a temp file, run in subprocess with env vars injected.
+    Write code to a temp file and execute it in a subprocess.
+    env_vars are injected as env vars; server secrets are NOT passed through.
     Returns (stdout, stderr, returncode).
-    Cleans up temp file on exit.
     """
     with tempfile.NamedTemporaryFile(
         mode="w",
@@ -27,7 +35,11 @@ async def execute_python_code(
         tmp_path = f.name
 
     try:
-        env = {**os.environ, **{k: str(v) for k, v in env_vars.items()}}
+        # Only pass safe system vars + caller-provided credentials
+        safe_os_env = {k: v for k, v in os.environ.items() if k in _SAFE_ENV_KEYS}
+        # Always include Python executable path
+        safe_os_env["PATH"] = os.environ.get("PATH", "")
+        env = {**safe_os_env, **{k: str(v) for k, v in env_vars.items()}}
         proc = await asyncio.create_subprocess_exec(
             "python",
             tmp_path,

@@ -21,6 +21,20 @@ import app.models.run  # noqa: F401
 async def lifespan(app: FastAPI):
     restore_from_gcs()
     Base.metadata.create_all(bind=engine)
+    
+    # Safe schema migrations — ignored if columns already exist
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        for stmt in [
+            "ALTER TABLE pipelines ADD COLUMN default_inputs JSON DEFAULT '{}'",
+            "ALTER TABLE runs ADD COLUMN triggered_by VARCHAR DEFAULT 'manual'",
+        ]:
+            try:
+                conn.execute(text(stmt))
+                conn.commit()
+            except Exception:
+                pass  # Column already exists
+    
     from app.scheduler import get_scheduler, load_all_schedules
     scheduler = get_scheduler()
     scheduler.start()
