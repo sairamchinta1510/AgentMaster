@@ -134,7 +134,6 @@ export function DesignPage() {
         } | null;
         if (blueprint?.agents?.length) {
           const store = useDesignStore.getState();
-          store.reset();
           blueprint.agents.forEach((spec) => {
             store.upsertAgent({
               agent_id: spec.agent_id,
