@@ -14,6 +14,18 @@ from app.models.run import AgentResult
 logger = logging.getLogger(__name__)
 
 
+def _parse_llm_json(raw: str) -> dict:
+    """Strip markdown code fences then parse JSON. Gemini often wraps output in ```json ... ```."""
+    text = raw.strip()
+    if text.startswith("```"):
+        # Remove opening fence (```json or ```)
+        text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+        # Remove closing fence
+        if text.rstrip().endswith("```"):
+            text = text.rstrip()[:-3].rstrip()
+    return json.loads(text)
+
+
 def _make_llm_client() -> tuple[AsyncOpenAI, str]:
     client = AsyncOpenAI(
         api_key=settings.active_api_key,
@@ -105,7 +117,7 @@ class AgentExecutorAgent:
                 response_format={"type": "json_object"},
                 temperature=0.2,
             )
-            plan = json.loads(plan_response.choices[0].message.content)
+            plan = _parse_llm_json(plan_response.choices[0].message.content)
 
             # Validate plan response structure
             action = plan.get("action")
@@ -162,7 +174,7 @@ class AgentExecutorAgent:
                 response_format={"type": "json_object"},
                 temperature=0.1,
             )
-            output = json.loads(synth_response.choices[0].message.content)
+            output = _parse_llm_json(synth_response.choices[0].message.content)
 
             # Attach raw execution details for UI display
             output["_code"] = code
