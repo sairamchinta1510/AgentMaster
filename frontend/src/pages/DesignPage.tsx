@@ -1,14 +1,15 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
 import { useDesignStore } from "../store/runStore";
 import { usePipelineStore } from "../store/pipelineStore";
 import { useDesignWS } from "../hooks/useDesignWS";
-import { getPipeline, updatePipeline, suggestExtensions, api } from "../api/client";
+import { getPipeline, updatePipeline, suggestExtensions } from "../api/client";
 import { ProgressStrip, type StepPill } from "../components/ProgressStrip";
 import { DesignAgentList } from "../components/AgentListColumn";
 import { CritiqueDetailColumn } from "../components/CritiqueDetailColumn";
 import { DagLogColumn } from "../components/DagLogColumn";
+import { useExtendWS } from "../hooks/useExtendWS";
 import type { AtomicAgent } from "../types";
 
 function ThinkingDots() {
@@ -74,7 +75,43 @@ export function DesignPage() {
   } | null>(null);
   const [selectedNewAgents, setSelectedNewAgents] = useState<Set<string>>(new Set());
 
+  // Extend WS
+  const [extendTrigger, setExtendTrigger] = useState(-1);
+  const [extendPayload, setExtendPayload] = useState<{
+    new_agents: Array<{ agent_id: string; agent_name: string; [k: string]: unknown }>;
+    new_edges: Array<{ from: string; to: string; payload_description?: string }>;
+  } | null>(null);
+
   const { stop } = useDesignWS(pipelineId ?? null, designTrigger);
+
+  // onExtendComplete: re-hydrate store from the merged blueprint returned by WS
+  const handleExtendComplete = useCallback((blueprint: Record<string, unknown>) => {
+    const agents = blueprint.agents as Array<{ agent_id: string; agent_name: string; description?: string; depends_on?: string[]; [k:string]: unknown }> ?? [];
+    const edges = blueprint.edges as Array<{ from: string; to: string }> ?? [];
+    const store = useDesignStore.getState();
+    store.reset();
+    agents.forEach((spec) => {
+      store.upsertAgent({
+        agent_id: spec.agent_id,
+        agent_name: spec.agent_name,
+        phase: "design_time",
+        state: "APPROVED" as const,
+        description: spec.description ?? "",
+        input_schema: (spec.input_schema as Record<string, unknown>) ?? {},
+        output_schema: (spec.output_schema as Record<string, unknown>) ?? {},
+        critique_iterations: 0,
+        quality_score: null,
+        critique_history: [],
+      });
+    });
+    store.setDAG({
+      nodes: agents.map((a) => ({ node_id: `node_${a.agent_id}`, agent_id: a.agent_id, agent_name: a.agent_name, depends_on: a.depends_on ?? [] })),
+      edges: edges.map((e) => ({ edge_id: `e_node_${e.from}_node_${e.to}`, from_node: `node_${e.from}`, to_node: `node_${e.to}` })),
+    });
+    store.setComplete(true);
+  }, []);
+
+  useExtendWS(pipelineId ?? null, extendTrigger, extendPayload, handleExtendComplete);
 
   // Pre-fill save name from pipeline
   useEffect(() => {
@@ -185,22 +222,20 @@ export function DesignPage() {
     }
   };
 
-  // Extend: apply selected agents → re-design with extended objective
+  // Extend: apply selected agents → run ONLY new agents through produce+critique WS
   const handleExtendApply = () => {
-    if (!extendSuggestions || !pipelineId || !activePipeline) return;
+    if (!extendSuggestions || !pipelineId) return;
     const picked = extendSuggestions.new_agents.filter((a) => selectedNewAgents.has(a.agent_id));
+    const pickedEdges = extendSuggestions.new_edges.filter(
+      (e) => picked.some((a) => a.agent_id === e.to || a.agent_id === e.from)
+    );
     if (picked.length === 0) return;
-    const addendum = `\n\nEXTENSION — also add these capabilities: ${picked.map((a) => `${a.agent_name}: ${a.description}`).join('; ')}`;
     setShowExtend(false);
     setExtendObjective("");
     setExtendSuggestions(null);
-    api.patch(`/api/pipelines/${pipelineId}`, {
-      name: activePipeline.name,
-      objective: activePipeline.objective + addendum,
-    }).then(() => {
-      setActivePipeline({ ...activePipeline, objective: activePipeline.objective + addendum });
-      setDesignTrigger((t) => t < 0 ? 0 : t + 1);
-    }).catch(() => {});
+    // Fire extend WS — only the picked agents go through produce+critique
+    setExtendPayload({ new_agents: picked, new_edges: pickedEdges });
+    setExtendTrigger((t) => t < 0 ? 0 : t + 1);
   };
 
   const pills: StepPill[] = agentList.map((a) => {

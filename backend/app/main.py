@@ -7,6 +7,7 @@ from app.config import settings
 from app.api.routes import pipelines, runs
 from app.api.ws_design import ws_design_handler
 from app.api.ws_run import ws_run_handler
+from app.api.ws_extend import ws_extend_handler
 from app.db import Base, engine
 from app.gcs_backup import restore_from_gcs
 import os
@@ -44,6 +45,11 @@ app.include_router(runs.router)
 @app.websocket("/ws/design/{pipeline_id}")
 async def ws_design(ws: WebSocket, pipeline_id: str):
     await ws_design_handler(ws, pipeline_id)
+
+
+@app.websocket("/ws/extend/{pipeline_id}")
+async def ws_extend(ws: WebSocket, pipeline_id: str):
+    await ws_extend_handler(ws, pipeline_id)
 
 
 @app.websocket("/ws/run/{run_id}")
