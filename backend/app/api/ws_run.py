@@ -243,6 +243,7 @@ async def ws_run_handler(websocket: WebSocket, run_id: str):
                     results[spec["agent_id"]] = rerun_result
                     if rerun_result.status != "failed":
                         context.update(rerun_result.output or {})
+                        failed_agent_ids.discard(spec["agent_id"])  # unblock downstream if fixed
 
                 await _run_critique_node(
                     critique_spec=agent_spec,
@@ -332,6 +333,7 @@ async def ws_run_handler(websocket: WebSocket, run_id: str):
                 results[_aid] = rerun_result
                 if rerun_result.status != "failed":
                     context.update(rerun_result.output or {})
+                    failed_agent_ids.discard(_aid)  # unblock downstream if rerun fixed the agent
 
             await _run_critique_node(
                 critique_spec={

@@ -84,20 +84,28 @@ Stdout: {stdout[:500] or "(empty)"}
 Stderr: {stderr[:500] or "(none)"}
 Return code: {returncode}
 
-CRITICAL ENV VAR RULES (violations = automatic NEEDS_FIX):
+ENV VAR RULES:
 1. CORRECT — reading any of the valid env vars listed above via os.environ is ALWAYS valid.
    e.g. os.environ["REPOSITORY_PATH"], os.environ["REPOSITORY_URL"] are both correct.
    Do NOT flag these as errors — they are the intended access pattern.
-2. WRONG — reading OUTPUT schema fields ({output_keys}) from os.environ.
-   Output fields must be COMPUTED/PRODUCED by the code, never read from os.environ.
-   e.g. if "log_storage_mechanism" is an output field, os.environ["LOG_STORAGE_MECHANISM"] is WRONG.
+2. Reading output schema fields from os.environ as a FALLBACK (e.g. `value = os.environ.get("FOO") or compute()`)
+   is acceptable if the agent produces correct output.
+
+OUTCOME-FIRST EVALUATION RULE (HIGHEST PRIORITY):
+If return_code = 0 AND all output schema fields ({output_keys}) are present in stdout with non-empty,
+non-placeholder values, the verdict MUST be APPROVED unless:
+  a) There is a critical security vulnerability (hardcoded secrets, SQL injection, etc.)
+  b) The output values are factually wrong or contradicted by the task description
+  c) A required output field is missing entirely or contains only 'unknown'/'placeholder'/'N/A'/'none'
+Do NOT flag NEEDS_FIX based on coding style, pattern preferences, or "should compute vs read from env var"
+when the actual output is correct. Judge the OUTPUT, not the implementation approach.
 
 Evaluate:
-1. Does the code produce all OUTPUT schema fields by computing them (not reading from os.environ)?
+1. (MOST IMPORTANT) Are all output fields present in stdout with valid, meaningful values?
 2. Does the output fulfil the agent's stated purpose: {agent_description}?
-3. Is the approach industry-standard for this domain?
-4. Are there security, reliability, or correctness issues?
-5. Is the output complete and actionable (not 'unknown', empty, or placeholder)?
+3. Are there ACTUAL correctness errors (wrong values, missing data, failed task goal)?
+4. Are there critical security issues (hardcoded secrets, command injection)?
+5. Is the output useful and actionable for the next agent in the pipeline?
 
-If verdict is NEEDS_FIX, fix_instructions must tell the agent exactly how to fix its code.
-IMPORTANT: Do NOT instruct the agent to remove os.environ reads for valid env vars — only flag output field reads."""
+If verdict is NEEDS_FIX, fix_instructions must describe a CONCRETE CORRECTNESS problem.
+Do NOT instruct the agent to change code style, refactor patterns, or remove env var reads if output is correct."""
