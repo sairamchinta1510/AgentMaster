@@ -64,7 +64,11 @@ class CritiqueNodeExecutor:
         if not content.strip():
             raise ValueError("LLM returned empty content for critique")
         raw = _repair_json_escapes(content)
-        return json.loads(raw)
+        result = json.loads(raw)
+        # LLM occasionally returns a JSON array — extract first dict element
+        if isinstance(result, list):
+            result = next((r for r in result if isinstance(r, dict)), {})
+        return result
 
     async def run_design_critique(
         self,
