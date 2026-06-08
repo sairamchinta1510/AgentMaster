@@ -68,7 +68,7 @@ class AgentCritiqueAgent:
             phase=phase,
             iteration=iteration,
             max_iterations=5,
-            verdict=CritiqueVerdict(data["verdict"]),
+            verdict=CritiqueVerdict(data.get("verdict", "NEEDS_FIX")),
             quality_score=float(data.get("quality_score", 0)),
             errors_remaining=int(data.get("errors_remaining", 0)),
             issues=issues,
