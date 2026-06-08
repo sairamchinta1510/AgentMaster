@@ -48,14 +48,18 @@ class CritiqueNodeExecutor:
             self.model = model or settings.active_model
 
     async def _call_critique_llm(self, prompt: str) -> dict:
-        assert self.client is not None, "Cannot call LLM with fake client"
+        if self.client is None:
+            raise RuntimeError("Cannot call LLM with fake client")
         response = await self.client.chat.completions.create(
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
             temperature=0.1,
         )
-        raw = _repair_json_escapes(response.choices[0].message.content)
+        content = response.choices[0].message.content or ""
+        if not content.strip():
+            raise ValueError("LLM returned empty content for critique")
+        raw = _repair_json_escapes(content)
         return json.loads(raw)
 
     async def run_design_critique(
@@ -68,6 +72,7 @@ class CritiqueNodeExecutor:
     ) -> CritiqueLoopResult:
         """Critique an agent's spec/schema at design time."""
         last_result: dict = {}
+        approved_seen = False
 
         for iteration in range(1, max_iterations + 1):
             prompt = build_design_critique_prompt(
@@ -103,16 +108,18 @@ class CritiqueNodeExecutor:
                     },
                 )
 
-            if verdict == "NEEDS_FIX" and on_fix_needed:
+            if verdict == "NEEDS_FIX" and on_fix_needed and not approved_seen:
                 await on_fix_needed(fix_instructions, iteration)
 
-            if verdict == "APPROVED" and iteration >= min_iterations:
-                return CritiqueLoopResult(
-                    verdict="APPROVED",
-                    quality_score=last_result.get("quality_score", 0),
-                    iterations=iteration,
-                    issues=issues,
-                )
+            if verdict == "APPROVED":
+                approved_seen = True
+                if iteration >= min_iterations:
+                    return CritiqueLoopResult(
+                        verdict="APPROVED",
+                        quality_score=last_result.get("quality_score", 0),
+                        iterations=iteration,
+                        issues=issues,
+                    )
 
         return CritiqueLoopResult(
             verdict=last_result.get("verdict", "NEEDS_FIX"),
@@ -137,6 +144,7 @@ class CritiqueNodeExecutor:
     ) -> CritiqueLoopResult:
         """Critique an agent's execution output at run time."""
         last_result: dict = {}
+        approved_seen = False
 
         for iteration in range(1, max_iterations + 1):
             prompt = build_run_critique_prompt(
@@ -177,16 +185,18 @@ class CritiqueNodeExecutor:
                     },
                 )
 
-            if verdict == "NEEDS_FIX" and on_fix_needed:
+            if verdict == "NEEDS_FIX" and on_fix_needed and not approved_seen:
                 await on_fix_needed(fix_instructions, iteration)
 
-            if verdict == "APPROVED" and iteration >= min_iterations:
-                return CritiqueLoopResult(
-                    verdict="APPROVED",
-                    quality_score=last_result.get("quality_score", 0),
-                    iterations=iteration,
-                    issues=issues,
-                )
+            if verdict == "APPROVED":
+                approved_seen = True
+                if iteration >= min_iterations:
+                    return CritiqueLoopResult(
+                        verdict="APPROVED",
+                        quality_score=last_result.get("quality_score", 0),
+                        iterations=iteration,
+                        issues=issues,
+                    )
 
         return CritiqueLoopResult(
             verdict=last_result.get("verdict", "NEEDS_FIX"),
