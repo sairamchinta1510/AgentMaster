@@ -93,19 +93,25 @@ ENV VAR RULES:
 
 OUTCOME-FIRST EVALUATION RULE (HIGHEST PRIORITY):
 If return_code = 0 AND all output schema fields ({output_keys}) are present in stdout with non-empty,
-non-placeholder values, the verdict MUST be APPROVED unless:
-  a) There is a critical security vulnerability (hardcoded secrets, SQL injection, etc.)
-  b) The output values are factually wrong or contradicted by the task description
-  c) A required output field is missing entirely or contains only 'unknown'/'placeholder'/'N/A'/'none'
-Do NOT flag NEEDS_FIX based on coding style, pattern preferences, or "should compute vs read from env var"
-when the actual output is correct. Judge the OUTPUT, not the implementation approach.
+non-placeholder values, the verdict MUST be APPROVED unless any of the AUTOMATIC FAIL conditions below apply.
+
+AUTOMATIC FAIL — flag NEEDS_FIX immediately if ANY of these are true:
+  a) fix_description says "Could not find" or "snippet not found" or "no changes made" — agent failed its goal
+  b) fixed_snippet or fixed_code contains placeholder text like "YOUR_NEW_", "PLACEHOLDER", "TODO", "FIXME",
+     or repeats a pattern like "YOUR_NEW_YOUR_NEW_" — the fix is nonsensical
+  c) The fix renames or changes environment variable names (e.g. GEMINI_API_KEY → YOUR_NEW_GEMINI_API_KEY) —
+     env var names must NEVER be changed; only their usage/handling should be improved
+  d) A required output field is missing or contains only 'unknown'/'none'/'N/A'
+  e) Critical security vulnerability introduced (hardcoded secrets, command injection)
+
+Do NOT flag NEEDS_FIX based on coding style or pattern preferences when the actual output is correct.
 
 Evaluate:
-1. (MOST IMPORTANT) Are all output fields present in stdout with valid, meaningful values?
-2. Does the output fulfil the agent's stated purpose: {agent_description}?
-3. Are there ACTUAL correctness errors (wrong values, missing data, failed task goal)?
-4. Are there critical security issues (hardcoded secrets, command injection)?
-5. Is the output useful and actionable for the next agent in the pipeline?
+1. (MOST IMPORTANT) Are all output fields present with valid, meaningful, non-placeholder values?
+2. Does the fix actually improve the code — better error handling, correct logic change?
+3. Does fixed_snippet differ meaningfully from original_snippet in the right direction?
+4. Is the output useful and actionable for the next agent in the pipeline?
 
-If verdict is NEEDS_FIX, fix_instructions must describe a CONCRETE CORRECTNESS problem.
-Do NOT instruct the agent to change code style, refactor patterns, or remove env var reads if output is correct."""
+If verdict is NEEDS_FIX, fix_instructions must be specific: tell the agent exactly what the correct fix
+should look like (e.g. "add a try/catch that checks for 400 API_KEY_INVALID and returns a user-friendly message").
+Do NOT instruct the agent to change style, refactor patterns, or remove valid env var reads."""
