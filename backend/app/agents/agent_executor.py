@@ -183,7 +183,14 @@ CODE FIX RULES — SURGICAL INSERTION (mandatory, no exceptions):
 The ONLY acceptable way to fix code is to INSERT new lines after a single anchor line.
 NEVER delete, replace, or rewrite existing code. The file MUST be longer after the fix.
 
+CRITICAL PATH RULE: ALWAYS construct the absolute file path before opening:
+  repository_path = os.environ.get("REPOSITORY_PATH", "")   # e.g. /tmp/tmpXXXX
+  offending_file  = os.environ.get("OFFENDING_FILE_PATH", "") # e.g. local-api-server.js
+  file_path = os.path.join(repository_path, offending_file)  # FULL absolute path
+  # NEVER use offending_file directly — it is relative and won't be in the git repo
+
 CORRECT insertion pattern:
+  file_path = os.path.join(os.environ["REPOSITORY_PATH"], os.environ["OFFENDING_FILE_PATH"])
   with open(file_path, 'r', encoding='utf-8') as f:
       content = f.read()
   # Try anchors IN ORDER — use the first one found
@@ -248,6 +255,24 @@ VERIFICATION (mandatory after every write):
   2. Assert len(verified) > len(original_content) — file MUST grow
   3. Assert insertion.split('\\n')[0] in verified — first inserted line MUST be present
   4. If any assertion fails: fix_applied=False, do NOT write again
+
+GIT DIFF RULES (mandatory for GenerateDiff agents):
+  repository_path = os.environ.get("REPOSITORY_PATH", "")
+  import subprocess
+  # CRITICAL: cwd=repository_path so git finds the .git directory
+  result = subprocess.run(['git', 'diff', 'HEAD'], cwd=repository_path,
+                          capture_output=True, text=True, timeout=30)
+  diff = result.stdout.strip()
+  if not diff:
+      result2 = subprocess.run(['git', 'diff'], cwd=repository_path,
+                                capture_output=True, text=True, timeout=30)
+      diff = result2.stdout.strip()
+  if not diff:
+      result3 = subprocess.run(['git', 'status', '--short'], cwd=repository_path,
+                                capture_output=True, text=True, timeout=30)
+      diff = result3.stdout.strip() or 'No changes detected'
+  # Output the diff
+  print(json.dumps({"diff_output": diff}))
 """
 
 SYNTH_SYSTEM_PROMPT = """You are synthesising the result of a real code execution into a structured output.
