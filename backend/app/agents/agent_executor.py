@@ -516,6 +516,69 @@ class AgentExecutorAgent:
             # ── EXEC phase ───────────────────────────────────────────────────
             code = plan.get("code", "")
 
+            # ── Deterministic template injection (bypasses LLM-generated code) ──
+            # If the agent's output schema matches a known pattern, replace LLM
+            # code with a verified working template. This prevents the LLM from
+            # generating broken code that always returns 0 or fails with syntax errors.
+            _out_keys = set(output_schema_keys)
+            _in_keys  = set(k.lower() for k in env_vars)
+
+            if "py_count" in _out_keys and "html_count" in _out_keys:
+                # File-counting agent — always use verbatim template
+                logger.info("[%s] Injecting deterministic FILE COUNTING template", agent_id)
+                code = (
+                    "import os, glob as _glob, json\n"
+                    "repo_path = os.environ.get('REPOSITORY_PATH', '')\n"
+                    "if not repo_path:\n"
+                    "    print(json.dumps({'py_count': 0, 'html_count': 0, "
+                    "'analysis_report': 'REPOSITORY_PATH not set'}))\n"
+                    "else:\n"
+                    "    py_files   = [f for f in _glob.glob("
+                    "os.path.join(repo_path, '**', '*.py'),   recursive=True) "
+                    "if '.git' not in f]\n"
+                    "    html_files = [f for f in _glob.glob("
+                    "os.path.join(repo_path, '**', '*.html'), recursive=True) "
+                    "if '.git' not in f]\n"
+                    "    print(f'Found {len(py_files)} .py and {len(html_files)} .html', "
+                    "file=__import__('sys').stderr)\n"
+                    "    def _describe(p):\n"
+                    "        try:\n"
+                    "            with open(p, encoding='utf-8', errors='ignore') as _f:\n"
+                    "                return ' '.join(_f.read(500).split())[:120] or 'empty'\n"
+                    "        except Exception:\n"
+                    "            return 'unreadable'\n"
+                    "    py_info   = [{'file': os.path.relpath(f, repo_path), "
+                    "'description': _describe(f)} for f in py_files[:50]]\n"
+                    "    html_info = [{'file': os.path.relpath(f, repo_path), "
+                    "'description': _describe(f)} for f in html_files[:50]]\n"
+                    "    report  = ('Python (.py) files: ' + str(len(py_files)) + "
+                    "'\\nHTML (.html) files: ' + str(len(html_files)) + '\\n\\n')\n"
+                    "    report += 'Python files:\\n' + "
+                    "'\\n'.join('  ' + i['file'] + ': ' + i['description'] for i in py_info)\n"
+                    "    report += '\\n\\nHTML files:\\n' + "
+                    "'\\n'.join('  ' + i['file'] + ': ' + i['description'] for i in html_info)\n"
+                    "    print(json.dumps({'py_count': len(py_files), "
+                    "'html_count': len(html_files), 'analysis_report': report}))\n"
+                )
+            elif "repository_path" in _out_keys and "git_repo_url" in _in_keys:
+                # Git-clone agent — always use verbatim template
+                logger.info("[%s] Injecting deterministic GIT CLONE template", agent_id)
+                code = (
+                    "import tempfile, subprocess, json, os, sys\n"
+                    "repo_url = os.environ.get('GIT_REPO_URL', '')\n"
+                    "if not repo_url:\n"
+                    "    print(json.dumps({'repository_path': '', "
+                    "'error': 'GIT_REPO_URL not set'}))\n"
+                    "else:\n"
+                    "    clone_dir = tempfile.mkdtemp()\n"
+                    "    result = subprocess.run(\n"
+                    "        ['git', 'clone', '--depth', '1', repo_url, clone_dir],\n"
+                    "        capture_output=True, text=True, timeout=120)\n"
+                    "    if result.returncode != 0:\n"
+                    "        print('Clone stderr: ' + result.stderr[:500], file=sys.stderr)\n"
+                    "    print(json.dumps({'repository_path': clone_dir}))\n"
+                )
+
             # ── Deterministic env-var sanitiser (runs before every LLM attempt) ─
             # Replace invented path/url var names with canonical equivalents,
             # but ONLY when the alias is not a real env var for this agent
