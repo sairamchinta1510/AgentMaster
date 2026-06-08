@@ -97,21 +97,29 @@ non-placeholder values, the verdict MUST be APPROVED unless any of the AUTOMATIC
 
 AUTOMATIC FAIL — flag NEEDS_FIX immediately if ANY of these are true:
   a) fix_description says "Could not find" or "snippet not found" or "no changes made" — agent failed its goal
-  b) fixed_snippet or fixed_code contains placeholder text like "YOUR_NEW_", "PLACEHOLDER", "TODO", "FIXME",
-     or repeats a pattern like "YOUR_NEW_YOUR_NEW_" — the fix is nonsensical
-  c) The fix renames or changes environment variable names (e.g. GEMINI_API_KEY → YOUR_NEW_GEMINI_API_KEY) —
-     env var names must NEVER be changed; only their usage/handling should be improved
+  b) fixed_snippet contains placeholder text: "YOUR_NEW_", "PLACEHOLDER", "TODO", "FIXME",
+     or nonsensical repeated patterns — the fix is invalid
+  c) The fix renames environment variable names (e.g. GEMINI_API_KEY → anything else) — NEVER acceptable
   d) A required output field is missing or contains only 'unknown'/'none'/'N/A'
   e) Critical security vulnerability introduced (hardcoded secrets, command injection)
+  f) DESTRUCTIVE CHANGE: fixed_snippet is more than 30% shorter than original_snippet in character count,
+     OR fixed_snippet is missing lines that were in original_snippet and those lines were not the bug.
+     A code fix must ADD lines, never delete working code. If the fix removed a try/catch block,
+     removed function body, or deleted more than 3 lines of working logic — this is AUTOMATIC FAIL.
+     Fix instructions: "Only INSERT new lines after the anchor line using content.replace(anchor, anchor+insertion, 1).
+     Do NOT delete existing try/catch blocks, function bodies, or any working code.
+     The fixed file MUST be longer than the original."
 
 Do NOT flag NEEDS_FIX based on coding style or pattern preferences when the actual output is correct.
 
 Evaluate:
 1. (MOST IMPORTANT) Are all output fields present with valid, meaningful, non-placeholder values?
-2. Does the fix actually improve the code — better error handling, correct logic change?
-3. Does fixed_snippet differ meaningfully from original_snippet in the right direction?
+2. Does the fix ADD new error handling without deleting existing working code?
+3. Is fixed_snippet longer than or equal in length to original_snippet? (fixes add lines, not remove)
 4. Is the output useful and actionable for the next agent in the pipeline?
 
-If verdict is NEEDS_FIX, fix_instructions must be specific: tell the agent exactly what the correct fix
-should look like (e.g. "add a try/catch that checks for 400 API_KEY_INVALID and returns a user-friendly message").
-Do NOT instruct the agent to change style, refactor patterns, or remove valid env var reads."""
+If verdict is NEEDS_FIX, fix_instructions must be specific: tell the agent EXACTLY:
+  - Which anchor line to use (verbatim)
+  - What lines to INSERT after the anchor
+  - That they must use content.replace(anchor, anchor + insertion, 1) — NOT replace a multi-line block
+  - That the fixed file must be LONGER than the original (assertion: len(new) > len(old))"""

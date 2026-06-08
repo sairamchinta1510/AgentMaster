@@ -161,26 +161,56 @@ FILESYSTEM SEARCH RULES (mandatory for any agent that identifies files from erro
 - For fix tasks: ALWAYS read the actual file content before modifying it. Write the modified content
   back to the SAME path (not /tmp) so git diff can detect the change.
 
-CODE FIX RULES (mandatory for any agent that modifies source files):
-- NEVER rename environment variables (e.g. GEMINI_API_KEY must stay GEMINI_API_KEY).
-- NEVER introduce placeholder text like YOUR_NEW_, PLACEHOLDER, TODO_REPLACE in the fix.
-- For api_key_invalid errors in JavaScript/Node.js: inside the HTTP response callback, AFTER parsing
-  the JSON response, ADD a status code check before accessing response data:
-    if (res.statusCode === 400 || res.statusCode === 401 || res.statusCode === 403) {{
-      const errMsg = json?.error?.message || `HTTP ${{res.statusCode}}`;
-      if (errMsg.includes('API_KEY_INVALID') || errMsg.includes('API key')) {{
-        return reject(new Error('API service unavailable — please contact the administrator'));
-      }}
-      return reject(new Error(`API error ${{res.statusCode}}: ${{errMsg}}`));
-    }}
-  Insert this block IMMEDIATELY AFTER the line `const json = JSON.parse(data);` and BEFORE
-  any line that accesses `json.candidates` or `json.content`.
-- For api_key_invalid errors in Python: inside the except/except block after the API call,
-  add a specific check: `if 'API_KEY_INVALID' in str(e): raise RuntimeError('API service unavailable')`
-- Use str.replace() with EXACT verbatim strings from the file. Read the file first, find the exact
-  lines to replace, then call content.replace(exact_old, new_with_addition, 1).
-- After writing the file, verify: re-read it and assert the new content is present.
-- Set fix_applied=True ONLY if the file was actually written AND the new content was verified.
+CODE FIX RULES — SURGICAL INSERTION (mandatory, no exceptions):
+The ONLY acceptable way to fix code is to INSERT new lines at an anchor point. NEVER delete or
+replace existing code blocks. The file must grow after a fix, never shrink.
+
+CORRECT pattern (single-line anchor + insertion):
+  with open(file_path, 'r') as f:
+      content = f.read()
+  # Find one exact anchor line (verbatim, with its trailing newline) after which to insert
+  anchor = "    const message = err instanceof Error ? err.message : 'Analysis failed';\n"
+  insertion = (
+      "    if (message.includes('API_KEY_INVALID') || message.includes('API key') ||\n"
+      "        message.includes('expired') || message.includes('key expired')) {{\n"
+      "      return res.status(503).json({{ error: 'API service unavailable — please contact the administrator' }});\n"
+      "    }}\n"
+  )
+  if anchor in content:
+      new_content = content.replace(anchor, anchor + insertion, 1)
+      with open(file_path, 'w') as f:
+          f.write(new_content)
+      # VERIFY: re-read and check file grew
+      with open(file_path, 'r') as f:
+          verified = f.read()
+      assert len(verified) > len(content), "File did not grow — insertion failed"
+      assert insertion.split('\n')[0] in verified, "Inserted line not found — insertion failed"
+      fix_applied = True
+
+WRONG patterns (NEVER use these):
+  BAD: content.replace(multi_line_block, new_block)   # deletes existing code
+  BAD: new_content = header + new_function_body        # rewrites whole function
+  BAD: content = content[:start] + replacement + content[end:]  # removes lines
+
+For api_key_invalid TypeScript/JavaScript — exact anchor and insertion:
+  Anchor (find this exact line in the catch block):
+    "    const message = err instanceof Error ? err.message : 'Analysis failed';\n"
+  OR if not found, try:
+    "    const message = err instanceof Error ? err.message : String(err);\n"
+  Insertion (add AFTER the anchor, before the return):
+    "    if (message.includes('API_KEY_INVALID') || message.includes('API key') || message.includes('expired')) {{\n"
+    "      return res.status(503).json({{ error: 'API service unavailable — please contact the administrator' }});\n"
+    "    }}\n"
+
+For api_key_invalid Python — exact anchor and insertion:
+  Anchor: "    except Exception as e:\n"  or  "    except GoogleAPIError as e:\n"
+  Insertion: "        if 'API_KEY_INVALID' in str(e) or 'API key' in str(e):\n            raise RuntimeError('API service unavailable')\n"
+
+VERIFICATION (mandatory after every write):
+  1. Re-read the file
+  2. Assert len(new) > len(original)  — file must GROW
+  3. Assert the first line of insertion IS in the new content
+  4. If any assertion fails: set fix_applied=False, do NOT write again
 """
 
 SYNTH_SYSTEM_PROMPT = """You are synthesising the result of a real code execution into a structured output.
