@@ -129,11 +129,12 @@ Code rules:
 - Use the EXACT env var names listed in the plan prompt under "Exact env var names available".
   If an expected input is not listed, use os.environ.get("KEY", default) with a fallback.
 - CANONICAL ENV VAR NAMES (always use these exact names, never invent alternatives):
-    REPOSITORY_PATH  = absolute path to the cloned repo on disk (e.g. /tmp/tmpXXXX)
-    GIT_REPO_URL     = the original git repository URL
-    ERROR_MESSAGE    = the error string reported by the user
+    REPOSITORY_PATH     = absolute path to the cloned repo on disk (e.g. /tmp/tmpXXXX)
+    GIT_REPO_URL        = the original git repository URL
+    ERROR_MESSAGE       = the error string reported by the user
     OFFENDING_FILE_PATH = relative path of the file to fix (e.g. local-api-server.js)
   NEVER use LOCAL_REPO_PATH, REPO_PATH, CLONE_PATH, LOCAL_PATH, DIRECTORY_PATH — these do not exist.
+  NEVER use REPO_URL, GIT_URL, REPOSITORY_URL, GIT_CLONE_URL, CLONE_URL — use GIT_REPO_URL instead.
 - Print the result as a single JSON object to stdout (last print statement)
 - Handle errors: print details to stderr, keep running
 - Write files only to /tmp if needed — always use unique paths: use tempfile.mkdtemp() or /tmp/<uuid4> — NEVER hardcode /tmp/repo or any fixed path that could collide across runs
@@ -481,17 +482,25 @@ class AgentExecutorAgent:
             code = plan.get("code", "")
 
             # ── Deterministic env-var sanitiser (runs before every LLM attempt) ─
-            # Replace invented path var names with the canonical REPOSITORY_PATH.
-            # Also strip bare `raise` statements — agents must never crash.
+            # Replace invented path/url var names with canonical equivalents.
+            # Also strip bare `raise`/`sys.exit` — agents must never crash.
             _PATH_ALIASES = [
                 "LOCAL_REPO_PATH", "REPO_PATH", "CLONE_PATH",
                 "LOCAL_PATH", "DIRECTORY_PATH", "REPO_DIR", "LOCAL_REPO",
             ]
-            for alias in _PATH_ALIASES:
-                code = code.replace(f'os.environ["{alias}"]', 'os.environ["REPOSITORY_PATH"]')
-                code = code.replace(f"os.environ['{alias}']", "os.environ['REPOSITORY_PATH']")
-                code = code.replace(f'os.environ.get("{alias}"', 'os.environ.get("REPOSITORY_PATH"')
-                code = code.replace(f"os.environ.get('{alias}'", "os.environ.get('REPOSITORY_PATH'")
+            _URL_ALIASES = [
+                "REPO_URL", "GIT_URL", "REPOSITORY_URL",
+                "GIT_CLONE_URL", "CLONE_URL", "GIT_REPO",
+            ]
+            _ALIAS_MAP = (
+                [( alias, "REPOSITORY_PATH") for alias in _PATH_ALIASES] +
+                [( alias, "GIT_REPO_URL")    for alias in _URL_ALIASES]
+            )
+            for alias, canonical in _ALIAS_MAP:
+                code = code.replace(f'os.environ["{alias}"]',    f'os.environ["{canonical}"]')
+                code = code.replace(f"os.environ['{alias}']",    f"os.environ['{canonical}']")
+                code = code.replace(f'os.environ.get("{alias}"', f'os.environ.get("{canonical}"')
+                code = code.replace(f"os.environ.get('{alias}'", f"os.environ.get('{canonical}'")
             # Replace ALL raise forms with stderr warnings so agents never crash:
             #   raise ValueError("msg")  raise e  raise ex  raise  raise SomeError from e
             import re as _re
@@ -591,11 +600,11 @@ class AgentExecutorAgent:
                     retry_plan = _parse_llm_json(retry_response.choices[0].message.content)
                     code = retry_plan.get("code", code)
                     # Re-apply sanitiser after every LLM retry
-                    for alias in _PATH_ALIASES:
-                        code = code.replace(f'os.environ["{alias}"]', 'os.environ["REPOSITORY_PATH"]')
-                        code = code.replace(f"os.environ['{alias}']", "os.environ['REPOSITORY_PATH']")
-                        code = code.replace(f'os.environ.get("{alias}"', 'os.environ.get("REPOSITORY_PATH"')
-                        code = code.replace(f"os.environ.get('{alias}'", "os.environ.get('REPOSITORY_PATH'")
+                    for alias, canonical in _ALIAS_MAP:
+                        code = code.replace(f'os.environ["{alias}"]',    f'os.environ["{canonical}"]')
+                        code = code.replace(f"os.environ['{alias}']",    f"os.environ['{canonical}']")
+                        code = code.replace(f'os.environ.get("{alias}"', f'os.environ.get("{canonical}"')
+                        code = code.replace(f"os.environ.get('{alias}'", f"os.environ.get('{canonical}'")
                     code = _re.sub(
                         r'^(\s*)raise(\s+\S[^\n]*|(?=\s*$))',
                         _neutralise_raise,
