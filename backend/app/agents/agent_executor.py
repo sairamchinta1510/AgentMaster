@@ -482,8 +482,10 @@ class AgentExecutorAgent:
             code = plan.get("code", "")
 
             # ── Deterministic env-var sanitiser (runs before every LLM attempt) ─
-            # Replace invented path/url var names with canonical equivalents.
-            # Also strip bare `raise`/`sys.exit` — agents must never crash.
+            # Replace invented path/url var names with canonical equivalents,
+            # but ONLY when the alias is not a real env var for this agent
+            # and the canonical IS available. This prevents replacing legitimate
+            # input field names (e.g. local_repo_path -> LOCAL_REPO_PATH).
             _PATH_ALIASES = [
                 "LOCAL_REPO_PATH", "REPO_PATH", "CLONE_PATH",
                 "LOCAL_PATH", "DIRECTORY_PATH", "REPO_DIR", "LOCAL_REPO",
@@ -493,14 +495,19 @@ class AgentExecutorAgent:
                 "GIT_CLONE_URL", "CLONE_URL", "GIT_REPO",
             ]
             _ALIAS_MAP = (
-                [( alias, "REPOSITORY_PATH") for alias in _PATH_ALIASES] +
-                [( alias, "GIT_REPO_URL")    for alias in _URL_ALIASES]
+                [(alias, "REPOSITORY_PATH") for alias in _PATH_ALIASES] +
+                [(alias, "GIT_REPO_URL")    for alias in _URL_ALIASES]
             )
-            for alias, canonical in _ALIAS_MAP:
-                code = code.replace(f'os.environ["{alias}"]',    f'os.environ["{canonical}"]')
-                code = code.replace(f"os.environ['{alias}']",    f"os.environ['{canonical}']")
-                code = code.replace(f'os.environ.get("{alias}"', f'os.environ.get("{canonical}"')
-                code = code.replace(f"os.environ.get('{alias}'", f"os.environ.get('{canonical}'")
+            def _apply_alias_map(src: str, alias_map: list, available: dict) -> str:
+                for alias, canonical in alias_map:
+                    # Only remap if: alias is NOT a real env var AND canonical IS
+                    if alias not in available and canonical in available:
+                        src = src.replace(f'os.environ["{alias}"]',    f'os.environ["{canonical}"]')
+                        src = src.replace(f"os.environ['{alias}']",    f"os.environ['{canonical}']")
+                        src = src.replace(f'os.environ.get("{alias}"', f'os.environ.get("{canonical}"')
+                        src = src.replace(f"os.environ.get('{alias}'", f"os.environ.get('{canonical}'")
+                return src
+            code = _apply_alias_map(code, _ALIAS_MAP, env_vars)
             # Replace ALL raise forms with stderr warnings so agents never crash:
             #   raise ValueError("msg")  raise e  raise ex  raise  raise SomeError from e
             import re as _re
@@ -600,11 +607,7 @@ class AgentExecutorAgent:
                     retry_plan = _parse_llm_json(retry_response.choices[0].message.content)
                     code = retry_plan.get("code", code)
                     # Re-apply sanitiser after every LLM retry
-                    for alias, canonical in _ALIAS_MAP:
-                        code = code.replace(f'os.environ["{alias}"]',    f'os.environ["{canonical}"]')
-                        code = code.replace(f"os.environ['{alias}']",    f"os.environ['{canonical}']")
-                        code = code.replace(f'os.environ.get("{alias}"', f'os.environ.get("{canonical}"')
-                        code = code.replace(f"os.environ.get('{alias}'", f"os.environ.get('{canonical}'")
+                    code = _apply_alias_map(code, _ALIAS_MAP, env_vars)
                     code = _re.sub(
                         r'^(\s*)raise(\s+\S[^\n]*|(?=\s*$))',
                         _neutralise_raise,
