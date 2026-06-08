@@ -59,6 +59,15 @@ class AgentCritiqueAgent:
     ) -> CritiqueResult:
         data = await self._call_llm(agent, phase, iteration, previous_issues, on_event=on_event)
         issues = [CritiqueIssue(**i) for i in data.get("issues", [])]
+        # Normalise verdict: LLM sometimes returns "NEEDS_FIX" instead of "NEEDS_REVISION"
+        _VERDICT_MAP = {"NEEDS_FIX": "NEEDS_REVISION", "FIX": "NEEDS_REVISION",
+                        "REJECT": "NEEDS_REVISION", "FAIL": "NEEDS_REVISION"}
+        raw_verdict = data.get("verdict", "NEEDS_REVISION")
+        raw_verdict = _VERDICT_MAP.get(raw_verdict, raw_verdict)
+        try:
+            verdict_val = CritiqueVerdict(raw_verdict)
+        except ValueError:
+            verdict_val = CritiqueVerdict.NEEDS_REVISION
         return CritiqueResult(
             critique_id=data.get(
                 "critique_id", f"{agent.agent_id}_critique_iter_{iteration}"
@@ -68,7 +77,7 @@ class AgentCritiqueAgent:
             phase=phase,
             iteration=iteration,
             max_iterations=5,
-            verdict=CritiqueVerdict(data.get("verdict", "NEEDS_FIX")),
+            verdict=verdict_val,
             quality_score=float(data.get("quality_score", 0)),
             errors_remaining=int(data.get("errors_remaining", 0)),
             issues=issues,
