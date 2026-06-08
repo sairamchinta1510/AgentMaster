@@ -251,3 +251,37 @@ def test_ws_run_dispatches_critique_even_when_dependency_failed():
     run_complete = next(event for event in events if event["type"] == "RUN_COMPLETE")
     result_ids = [result["agent_id"] for result in run_complete["results"]]
     assert result_ids == ["task_1", "critique_1"]
+
+
+@pytest.mark.asyncio
+async def test_design_critique_node_calls_design_critique():
+    """Critique node in design blueprint triggers run_design_critique."""
+    from app.api.ws_design import _run_design_critique_node
+    from app.agents.runtime_critique import CritiqueLoopResult
+
+    mock_executor = MagicMock()
+    mock_executor.run_design_critique = AsyncMock(return_value=CritiqueLoopResult(
+        verdict="APPROVED", quality_score=8.5, iterations=3,
+    ))
+    redesign_calls = []
+
+    async def mock_redesign(spec, fix_instructions):
+        redesign_calls.append((spec["agent_id"], fix_instructions))
+
+    with patch("app.api.ws_design.CritiqueNodeExecutor", return_value=mock_executor):
+        await _run_design_critique_node(
+            critique_spec={
+                "agent_id": "c1", "agent_name": "CritiqueClone",
+                "agent_type": "critique", "depends_on": ["clone_001"],
+            },
+            agent_specs=[{
+                "agent_id": "clone_001", "agent_name": "CloneRepo",
+                "description": "Clones a git repo",
+                "input_schema": {"clone_url": {"type": "string"}},
+                "output_schema": {"repository_path": {"type": "string"}},
+            }],
+            send=AsyncMock(),
+            redesign_agent=mock_redesign,
+        )
+
+    mock_executor.run_design_critique.assert_called_once()

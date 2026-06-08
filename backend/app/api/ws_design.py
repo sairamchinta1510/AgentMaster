@@ -6,6 +6,7 @@ from app.db import SessionLocal
 from app.agents.agent_master import AgentMasterAgent
 from app.agents.agent_producer import AgentProducerAgent
 from app.agents.agent_critique import AgentCritiqueAgent, run_critique_loop
+from app.agents.runtime_critique import CritiqueNodeExecutor
 from app.models.pipeline import PipelineORM
 from app.models.agent import AgentState
 from app.models.dag import DAGNode, DAGEdge
@@ -13,6 +14,66 @@ from app.config import settings
 from app.gcs_backup import backup_to_gcs
 
 logger = logging.getLogger(__name__)
+
+
+async def _run_design_critique_node(
+    critique_spec: dict,
+    agent_specs: list[dict],
+    send,
+    redesign_agent,
+) -> None:
+    """Execute a critique node against agent specs during pipeline design."""
+    agent_map = {a["agent_id"]: a for a in agent_specs}
+    deps = critique_spec.get("depends_on", [])
+    executor = CritiqueNodeExecutor()
+
+    if not deps:
+        await send("AGENT_RESULT", {
+            "agent_id": critique_spec["agent_id"],
+            "agent_name": critique_spec.get("agent_name", "Critique"),
+            "status": "completed",
+            "output": {"critique_verdict": "SKIPPED", "reason": "no depends_on"},
+            "error": None,
+            "duration_ms": 0,
+        })
+        return
+
+    for target_id in deps:
+        target_spec = agent_map.get(target_id)
+        if not target_spec:
+            continue
+
+        async def on_fix(instructions: str, iteration: int, _tid=target_id):
+            await send("CRITIQUE_FIX", {
+                "agent_id": critique_spec["agent_id"],
+                "target_agent_id": _tid,
+                "iteration": iteration,
+                "fix_instructions": instructions,
+            })
+            await redesign_agent(target_spec, instructions)
+
+        result = await executor.run_design_critique(
+            agent_spec=target_spec,
+            min_iterations=3,
+            max_iterations=5,
+            on_fix_needed=on_fix,
+            on_event=send,
+        )
+
+        await send("AGENT_RESULT", {
+            "agent_id": critique_spec["agent_id"],
+            "agent_name": critique_spec.get("agent_name", "Critique"),
+            "status": "completed" if result.verdict == "APPROVED" else "failed",
+            "output": {
+                "critique_verdict": result.verdict,
+                "quality_score": result.quality_score,
+                "iterations": result.iterations,
+                "issues": result.issues,
+                "target_agent": target_id,
+            },
+            "error": result.fix_instructions if result.verdict == "NEEDS_FIX" else None,
+            "duration_ms": 0,
+        })
 
 
 async def ws_design_handler(websocket: WebSocket, pipeline_id: str):
@@ -61,6 +122,32 @@ async def ws_design_handler(websocket: WebSocket, pipeline_id: str):
         final_agent_count = 0
 
         for i, agent_spec in enumerate(blueprint.get("agents", []), 1):
+            if agent_spec.get("agent_type") == "critique":
+                async def _redesign(spec, fix_instructions, _blueprint=blueprint):
+                    revised = await producer.produce(
+                        {**spec, "critique_fix": fix_instructions},
+                        "design_time",
+                        pipeline_id,
+                        {},
+                        on_event=send,
+                    )
+                    for j, blueprint_agent in enumerate(_blueprint.get("agents", [])):
+                        if blueprint_agent["agent_id"] == spec["agent_id"]:
+                            _blueprint["agents"][j] = (
+                                revised.model_dump()
+                                if hasattr(revised, "model_dump")
+                                else revised
+                            )
+                            break
+
+                await _run_design_critique_node(
+                    critique_spec=agent_spec,
+                    agent_specs=blueprint.get("agents", []),
+                    send=send,
+                    redesign_agent=_redesign,
+                )
+                continue
+
             agent_name = agent_spec.get("agent_name", "Agent")
             await send(
                 "AGENT_STARTED",
