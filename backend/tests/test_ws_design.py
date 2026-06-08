@@ -1,12 +1,22 @@
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
 
 from app.agents.agent_master import AgentMasterAgent
 from app.agents.agent_producer import AgentProducerAgent
+from app.agents.runtime_critique import CritiqueLoopResult
 from app.config import settings
 from app.main import app
 from app.models.agent import AgentState, AtomicAgent, CritiqueResult, CritiqueVerdict
+
+
+def _auto_approved_executor():
+    """Returns a CritiqueNodeExecutor mock that always approves — for auto-critique."""
+    mock = MagicMock()
+    mock.run_design_critique = AsyncMock(
+        return_value=CritiqueLoopResult(verdict="APPROVED", quality_score=9.0, iterations=3)
+    )
+    return mock
 
 
 def _approved_critique(agent_id: str, agent_name: str, iteration: int = 1) -> CritiqueResult:
@@ -78,6 +88,7 @@ def test_ws_design_replaces_decomposed_node_with_series():
                 new=AsyncMock(side_effect=[fetch_agent, middle_agent, publish_agent]),
             ),
             patch("app.api.ws_design.run_critique_loop", new=AsyncMock(side_effect=critique_results)),
+            patch("app.api.ws_design.CritiqueNodeExecutor", return_value=_auto_approved_executor()),
             patch("app.api.ws_design.backup_to_gcs"),
             patch("app.scheduler.unregister_pipeline_schedule"),
         ):
@@ -172,6 +183,12 @@ def test_ws_design_redesign_mutates_target_spec_in_place():
     )
 
     class VerifyingExecutor:
+        """Used for both auto-critique (after run_critique_loop) and explicit critique node.
+        First call: auto-critique on target — verifies mutation works.
+        Second call: explicit critique node — target already improved, just approve."""
+        def __init__(self):
+            self.call_count = 0
+
         async def run_design_critique(
             self,
             agent_spec,
@@ -180,9 +197,13 @@ def test_ws_design_redesign_mutates_target_spec_in_place():
             on_fix_needed,
             on_event,
         ):
-            assert agent_spec["description"] == "original description"
-            await on_fix_needed("Improve the design", 1)
-            assert agent_spec["description"] == "improved description"
+            self.call_count += 1
+            if self.call_count == 1:
+                # Auto-critique: spec starts as original, mutation should work
+                assert agent_spec["description"] == "original description"
+                await on_fix_needed("Improve the design", 1)
+                assert agent_spec["description"] == "improved description"
+            # Subsequent calls (explicit critique node): spec is already improved — just approve
             return CritiqueLoopResult(verdict="APPROVED", quality_score=9.0, iterations=3)
 
     with TestClient(app) as client:

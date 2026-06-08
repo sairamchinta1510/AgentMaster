@@ -247,7 +247,8 @@ def test_ws_run_dispatches_critique_even_when_dependency_failed():
             else:
                 raise AssertionError("ws_run flow did not finish within 20 events")
 
-    assert critique_calls == ["critique_1"]
+    assert "critique_1" in critique_calls  # explicit critique node ran
+    assert any(c.startswith("_autocritique_") for c in critique_calls)  # auto-critique ran on task_1
     run_complete = next(event for event in events if event["type"] == "RUN_COMPLETE")
     result_ids = [result["agent_id"] for result in run_complete["results"]]
     assert result_ids == ["task_1", "critique_1"]

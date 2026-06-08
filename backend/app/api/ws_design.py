@@ -180,6 +180,32 @@ async def ws_design_handler(websocket: WebSocket, pipeline_id: str):
                 agent, critique_agent, producer, "design_time", on_event=send
             )
 
+            # ── Auto domain-expert critique after existing critique loop ──────
+            # Use the original blueprint spec (has description/schemas) not the produced AtomicAgent
+
+            async def _auto_redesign(spec, fix_instructions, _prod=producer, _pid=pipeline_id):
+                revised = await _prod.produce(
+                    {**spec, "critique_fix": fix_instructions},
+                    "design_time", _pid, {}, on_event=send,
+                )
+                revised_data = (
+                    revised.model_dump() if hasattr(revised, "model_dump")
+                    else (revised if isinstance(revised, dict) else {})
+                )
+                spec.update(revised_data)
+
+            await _run_design_critique_node(
+                critique_spec={
+                    "agent_id": f"_autocritic_{agent.agent_id}",
+                    "agent_name": f"DomainCritique:{agent.agent_name}",
+                    "agent_type": "critique",
+                    "depends_on": [agent.agent_id],
+                },
+                agent_specs=[agent_spec],
+                send=send,
+                redesign_agent=_auto_redesign,
+            )
+
             if len(result_agents) > 1:
                 orig_node_id = f"node_{agent.agent_id}"
                 predecessors = [edge.from_node for edge in dag.edges if edge.to_node == orig_node_id]

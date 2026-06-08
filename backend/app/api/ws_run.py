@@ -315,6 +315,31 @@ async def ws_run_handler(websocket: WebSocket, run_id: str):
                 },
             )
 
+            # ── Auto-critique every agent after execution ─────────────────────
+            async def _auto_rerun(spec, ctx, fix_instr, _aid=agent_id, _spec=agent_spec):
+                rerun_result = await executor.execute(
+                    {**_spec, "_critique_fix": fix_instr},
+                    {**ctx, "_critique_fix_instructions": fix_instr},
+                    on_code_event=_on_code_event,
+                )
+                results[_aid] = rerun_result
+                if rerun_result.status != "failed":
+                    context.update(rerun_result.output or {})
+
+            await _run_critique_node(
+                critique_spec={
+                    "agent_id": f"_autocritique_{agent_id}",
+                    "agent_name": f"Critique:{agent_spec.get('agent_name', '')}",
+                    "agent_type": "critique",
+                    "depends_on": [agent_id],
+                },
+                ordered_agents=[agent_spec],
+                results=results,
+                context=context,
+                send=send,
+                rerun_agent=_auto_rerun,
+            )
+
         final_results = [results[agent["agent_id"]] for agent in ordered_agents if agent["agent_id"] in results]
         failed = [result for result in final_results if result.status == "failed"]
         final_status = "failed" if failed else "completed"
