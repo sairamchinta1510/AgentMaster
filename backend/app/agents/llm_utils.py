@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+from json_repair import repair_json
 from openai import AsyncOpenAI
 
 logger = logging.getLogger(__name__)
@@ -9,14 +10,18 @@ logger = logging.getLogger(__name__)
 def _repair_json_escapes(text: str) -> str:
     r"""Fix invalid content in LLM-generated JSON strings.
 
-    Handles two classes of problems:
-    1. Bare backslashes (e.g. \w, C:\Users) — escaped to \\
-    2. Literal control characters inside strings (e.g. real newline 0x0A, tab 0x09)
-       — replaced with their JSON escape sequences (\n, \t, etc.)
-
-    Uses a state-machine scanner so already-valid escape sequences (\\, \n, \uXXXX)
-    are never double-escaped.
+    Uses json-repair as the primary fixer (handles unescaped quotes, missing
+    commas, control characters, etc.), with our custom state-machine as a
+    pre-processing step for raw backslash escapes that confuse json-repair.
     """
+    # Pre-process: fix bare backslashes and literal control chars (our state machine)
+    text = _fix_raw_escapes(text)
+    # Full structural repair via json-repair library
+    return repair_json(text, ensure_ascii=False)
+
+
+def _fix_raw_escapes(text: str) -> str:
+    r"""Pre-processing pass: fix bare backslashes and literal control characters."""
     HEX = frozenset('0123456789abcdefABCDEF')
     VALID_SINGLE = frozenset('"\\' + '/bfnrt')
     CONTROL_ESCAPES = {'\n': '\\n', '\r': '\\r', '\t': '\\t', '\b': '\\b', '\f': '\\f'}
@@ -38,16 +43,13 @@ def _repair_json_escapes(text: str) -> str:
         if c == '\\':
             nxt = text[i + 1] if i + 1 < len(text) else ''
             if nxt in VALID_SINGLE:
-                # e.g. \\ \" \n \t — keep as-is
                 result.append(c)
                 result.append(nxt)
                 i += 2
             elif nxt == 'u' and i + 5 < len(text) and all(ch in HEX for ch in text[i + 2:i + 6]):
-                # Valid \uXXXX unicode escape — keep as-is
                 result.append(text[i:i + 6])
                 i += 6
             else:
-                # Invalid escape — double the backslash to make it valid JSON
                 result.append('\\\\')
                 i += 1
         elif c == '"':
@@ -55,7 +57,6 @@ def _repair_json_escapes(text: str) -> str:
             result.append(c)
             i += 1
         elif c in CONTROL_ESCAPES:
-            # Literal control character inside a JSON string — escape it
             result.append(CONTROL_ESCAPES[c])
             i += 1
         else:
@@ -102,13 +103,14 @@ async def stream_llm_json(
     if not full.strip():
         raise ValueError(f"LLM returned empty response for context: {context}")
 
+    repaired = _repair_json_escapes(full)
+    # json-repair always returns parseable JSON; validate to surface any remaining issues
     try:
-        repaired = _repair_json_escapes(full)
-        json.loads(repaired)  # validate before returning
-        return repaired
+        json.loads(repaired)
     except json.JSONDecodeError as exc:
         logger.error(
-            "LLM response for '%s' was not valid JSON (length=%d) at %s: %s…",
+            "LLM response for '%s' still invalid after repair (length=%d): %s — %s…",
             context, len(full), exc, full[:200],
         )
         raise
+    return repaired
