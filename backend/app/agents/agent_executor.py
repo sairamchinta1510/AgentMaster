@@ -142,25 +142,40 @@ Code rules:
 - Use only pre-installed packages: httpx, requests, boto3, google-cloud-logging,
   google-cloud-monitoring, PyGithub, kubernetes, subprocess, glob, pathlib, json, os, sys, datetime
 
-GIT CLONE RULE (mandatory for any agent that clones a repository):
-  Use tempfile.mkdtemp() for the target directory. After cloning, output the EXACT cloned path:
-    import tempfile, subprocess, json, os
-    repo_url = os.environ.get("GIT_REPO_URL", "")
-    clone_dir = tempfile.mkdtemp()
-    subprocess.run(["git", "clone", "--depth", "1", repo_url, clone_dir], check=False, capture_output=True)
-    print(json.dumps({"repository_path": clone_dir}))
-  NEVER output repository_path as None, empty, or a parent directory.
-  ALWAYS verify the clone succeeded: check os.path.isdir(clone_dir) before printing.
+GIT CLONE RULE — use this EXACT code template verbatim (only change repo_url var name if needed):
+  import tempfile, subprocess, json, os, sys
+  repo_url = os.environ.get("GIT_REPO_URL", "")
+  if not repo_url:
+      print(json.dumps({"repository_path": "", "error": "GIT_REPO_URL not set"}))
+      sys.exit(0)
+  clone_dir = tempfile.mkdtemp()
+  result = subprocess.run(["git", "clone", "--depth", "1", repo_url, clone_dir],
+                          capture_output=True, text=True, timeout=120)
+  if result.returncode != 0:
+      print(f"Clone stderr: {result.stderr[:500]}", file=sys.stderr)
+  print(json.dumps({"repository_path": clone_dir}))
 
-FILE READING RULE (mandatory for any agent that reads/searches files in a repo):
-  NEVER call tempfile.mkdtemp() — you are not cloning, you are reading.
-  ALWAYS read the path from the env var:
-    repo_path = os.environ.get("REPOSITORY_PATH", "")
-  Then search within it:
-    import glob, os
-    py_files = glob.glob(os.path.join(repo_path, "**", "*.py"), recursive=True)
-    html_files = glob.glob(os.path.join(repo_path, "**", "*.html"), recursive=True)
-  The repo is already cloned — do NOT clone again, do NOT create a new temp dir.
+FILE COUNTING RULE — use this EXACT code template verbatim:
+  import os, glob, json
+  repo_path = os.environ.get("REPOSITORY_PATH", "")
+  # Filter out .git directory
+  py_files   = [f for f in glob.glob(os.path.join(repo_path, "**", "*.py"),   recursive=True) if ".git" not in f]
+  html_files = [f for f in glob.glob(os.path.join(repo_path, "**", "*.html"), recursive=True) if ".git" not in f]
+  print(f"Found {len(py_files)} .py files and {len(html_files)} .html files", file=__import__('sys').stderr)
+  # Build descriptions — read first 3 lines of each file
+  def describe(path):
+      try:
+          with open(path, encoding="utf-8", errors="ignore") as f:
+              head = " ".join(f.read(500).split())
+          return head[:120] or "empty file"
+      except Exception:
+          return "unreadable"
+  py_info   = [{"file": os.path.relpath(f, repo_path), "description": describe(f)} for f in py_files[:50]]
+  html_info = [{"file": os.path.relpath(f, repo_path), "description": describe(f)} for f in html_files[:50]]
+  report = f"Python (.py) files: {len(py_files)}\nHTML (.html) files: {len(html_files)}\n\n"
+  report += "Python files:\n" + "\n".join(f"  {i['file']}: {i['description']}" for i in py_info)
+  report += "\n\nHTML files:\n"  + "\n".join(f"  {i['file']}: {i['description']}" for i in html_info)
+  print(json.dumps({"py_count": len(py_files), "html_count": len(html_files), "analysis_report": report}))
 
 FILESYSTEM SEARCH RULES (mandatory for any agent that identifies files from errors):
 - NEVER guess or infer file paths based on naming conventions or assumptions.
