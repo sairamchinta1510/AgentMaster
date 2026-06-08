@@ -16,6 +16,20 @@ A `Critique` node is a first-class agent type in the pipeline DAG. The pipeline 
 
 ---
 
+## Scope: Design Mode AND Run Mode
+
+The Critique Agent node works **identically in both modes**:
+
+### Design Mode (blueprint creation)
+When the pipeline is being designed (agents are being specified), the Critique node validates each agent's **spec, description, input/output schema, and atomicity** against industry standards before the pipeline is saved. If issues are found, the agent is asked to revise its design.
+
+### Run Mode (pipeline execution)
+When the pipeline runs, the Critique node validates each agent's **actual execution output** against industry standards. If issues are found, the agent re-executes with fix instructions.
+
+Same verdict format (`APPROVED` / `NEEDS_FIX`), same min/max iteration rules, same domain-expert LLM prompt — the only difference is what is being critiqued (spec vs output).
+
+---
+
 ## Architecture
 
 ```
@@ -117,9 +131,10 @@ Return ONLY JSON:
 | File | Role |
 |------|------|
 | `backend/app/agents/runtime_critique.py` | `CritiqueAgent` class — LLM-based domain-expert evaluator |
-| `backend/app/api/ws_run.py` | Detect `agent_type=critique`, run critique loop |
+| `backend/app/api/ws_run.py` | Detect `agent_type=critique`, run critique loop at run time |
+| `backend/app/api/ws_design.py` | Detect `agent_type=critique`, run critique loop at design time |
 | `backend/app/models/agent.py` | Add `agent_type` field, `CritiqueConfig` model |
-| `backend/app/prompts/critique_runtime.py` | Critique LLM system prompt |
+| `backend/app/prompts/critique_runtime.py` | Critique LLM prompts (design-time and run-time variants) |
 | `backend/tests/test_runtime_critique.py` | TDD tests |
 
 ---
@@ -127,8 +142,8 @@ Return ONLY JSON:
 ## What Does NOT Change
 
 - Normal task agents (`agent_type: "task"`) are unchanged
-- The existing design-time critique loop (blueprint generation) is unchanged
 - The static `code_reviewer.py` pre-checks remain as a fast pre-filter
+- The existing internal design-time critique (`run_critique_loop`) is **replaced** by the Critique node for pipelines that include one
 
 ---
 
