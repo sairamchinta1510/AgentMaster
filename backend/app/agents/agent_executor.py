@@ -505,6 +505,19 @@ class AgentExecutorAgent:
                 _neutralise_raise,
                 code, flags=_re.MULTILINE,
             )
+            # Neutralise sys.exit(non-zero), exit(non-zero), os._exit — keep sys.exit(0)
+            def _neutralise_exit(m: "_re.Match[str]") -> str:
+                indent = m.group(1)
+                arg = (m.group(2) or "0").strip().strip("()")
+                # keep sys.exit(0) — clean success exit
+                if arg in ("0", ""):
+                    return m.group(0)
+                return f"{indent}print('WARNING: suppressed exit({arg})', file=__import__('sys').stderr)"
+            code = _re.sub(
+                r'^(\s*)(?:sys\.exit|os\._exit|exit)\(([^\)]*)\)',
+                _neutralise_exit,
+                code, flags=_re.MULTILINE,
+            )
 
             # env_vars already built above (before plan prompt)
 
@@ -586,6 +599,11 @@ class AgentExecutorAgent:
                     code = _re.sub(
                         r'^(\s*)raise(\s+\S[^\n]*|(?=\s*$))',
                         _neutralise_raise,
+                        code, flags=_re.MULTILINE,
+                    )
+                    code = _re.sub(
+                        r'^(\s*)(?:sys\.exit|os\._exit|exit)\(([^\)]*)\)',
+                        _neutralise_exit,
                         code, flags=_re.MULTILINE,
                     )
 
