@@ -152,6 +152,16 @@ GIT CLONE RULE (mandatory for any agent that clones a repository):
   NEVER output repository_path as None, empty, or a parent directory.
   ALWAYS verify the clone succeeded: check os.path.isdir(clone_dir) before printing.
 
+FILE READING RULE (mandatory for any agent that reads/searches files in a repo):
+  NEVER call tempfile.mkdtemp() — you are not cloning, you are reading.
+  ALWAYS read the path from the env var:
+    repo_path = os.environ.get("REPOSITORY_PATH", "")
+  Then search within it:
+    import glob, os
+    py_files = glob.glob(os.path.join(repo_path, "**", "*.py"), recursive=True)
+    html_files = glob.glob(os.path.join(repo_path, "**", "*.html"), recursive=True)
+  The repo is already cloned — do NOT clone again, do NOT create a new temp dir.
+
 FILESYSTEM SEARCH RULES (mandatory for any agent that identifies files from errors):
 - NEVER guess or infer file paths based on naming conventions or assumptions.
 - ALWAYS search the actual filesystem using os.walk() or pathlib.Path.rglob() to find relevant files.
