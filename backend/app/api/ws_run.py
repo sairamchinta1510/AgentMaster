@@ -218,32 +218,7 @@ async def ws_run_handler(websocket: WebSocket, run_id: str):
         for agent_spec in ordered_agents:
             agent_id = agent_spec["agent_id"]
 
-            # Skip this agent if any of its dependencies failed
-            failed_deps = [dep for dep in agent_spec.get("depends_on", []) if dep in failed_agent_ids]
-            if failed_deps:
-                skip_msg = f"Skipped: upstream agent(s) failed — {', '.join(failed_deps)}"
-                logger.warning("Skipping %s because of failed deps: %s", agent_id, failed_deps)
-                skipped_result = AgentResult(
-                    agent_id=agent_id,
-                    agent_name=agent_spec.get("agent_name", agent_id),
-                    status="failed",
-                    output={},
-                    error=skip_msg,
-                    duration_ms=0,
-                )
-                results[agent_id] = skipped_result
-                failed_agent_ids.add(agent_id)
-                await send(
-                    "AGENT_RESULT",
-                    {
-                        "agent_id": agent_id,
-                        "agent_name": skipped_result.agent_name,
-                        "status": "failed",
-                        "output": {},
-                        "error": skip_msg,
-                        "duration_ms": 0,
-                    },
-                )
+            if agent_id in failed_agent_ids:
                 continue
 
             await send(
@@ -288,6 +263,34 @@ async def ws_run_handler(websocket: WebSocket, run_id: str):
                 critique_result = results.get(agent_id)
                 if critique_result and critique_result.status == "failed":
                     failed_agent_ids.add(agent_id)
+                continue
+
+            # Skip this agent if any of its dependencies failed
+            failed_deps = [dep for dep in agent_spec.get("depends_on", []) if dep in failed_agent_ids]
+            if failed_deps:
+                skip_msg = f"Skipped: upstream agent(s) failed — {', '.join(failed_deps)}"
+                logger.warning("Skipping %s because of failed deps: %s", agent_id, failed_deps)
+                skipped_result = AgentResult(
+                    agent_id=agent_id,
+                    agent_name=agent_spec.get("agent_name", agent_id),
+                    status="failed",
+                    output={},
+                    error=skip_msg,
+                    duration_ms=0,
+                )
+                results[agent_id] = skipped_result
+                failed_agent_ids.add(agent_id)
+                await send(
+                    "AGENT_RESULT",
+                    {
+                        "agent_id": agent_id,
+                        "agent_name": skipped_result.agent_name,
+                        "status": "failed",
+                        "output": {},
+                        "error": skip_msg,
+                        "duration_ms": 0,
+                    },
+                )
                 continue
 
             result = await executor.execute(agent_spec, context, on_code_event=_on_code_event)
