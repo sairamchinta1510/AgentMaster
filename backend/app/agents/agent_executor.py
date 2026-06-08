@@ -128,6 +128,12 @@ Code rules:
   NEVER raise an error or exit(1) just because an optional input is absent.
 - Use the EXACT env var names listed in the plan prompt under "Exact env var names available".
   If an expected input is not listed, use os.environ.get("KEY", default) with a fallback.
+- CANONICAL ENV VAR NAMES (always use these exact names, never invent alternatives):
+    REPOSITORY_PATH  = absolute path to the cloned repo on disk (e.g. /tmp/tmpXXXX)
+    GIT_REPO_URL     = the original git repository URL
+    ERROR_MESSAGE    = the error string reported by the user
+    OFFENDING_FILE_PATH = relative path of the file to fix (e.g. local-api-server.js)
+  NEVER use LOCAL_REPO_PATH, REPO_PATH, CLONE_PATH, LOCAL_PATH, DIRECTORY_PATH — these do not exist.
 - Print the result as a single JSON object to stdout (last print statement)
 - Handle errors: print details to stderr, keep running
 - Write files only to /tmp if needed — always use unique paths: use tempfile.mkdtemp() or /tmp/<uuid4> — NEVER hardcode /tmp/repo or any fixed path that could collide across runs

@@ -90,6 +90,10 @@ ENV VAR RULES:
    Do NOT flag these as errors — they are the intended access pattern.
 2. Reading output schema fields from os.environ as a FALLBACK (e.g. `value = os.environ.get("FOO") or compute()`)
    is acceptable if the agent produces correct output.
+3. CRITICAL — fix_instructions MUST ONLY reference env var names from the "Valid env vars" list above.
+   NEVER suggest env var names that are NOT in that list (e.g. LOCAL_REPO_PATH, REPO_PATH, CLONE_PATH,
+   LOCAL_PATH, DIRECTORY_PATH are all INVALID — use REPOSITORY_PATH instead).
+   If fix_instructions would reference an invented env var, replace it with the correct one from the list.
 
 OUTCOME-FIRST EVALUATION RULE (HIGHEST PRIORITY):
 If return_code = 0 AND all output schema fields ({output_keys}) are present in stdout with non-empty,
