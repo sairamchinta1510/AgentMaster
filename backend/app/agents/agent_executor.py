@@ -140,77 +140,114 @@ FILESYSTEM SEARCH RULES (mandatory for any agent that identifies files from erro
 - ALWAYS search the actual filesystem using os.walk() or pathlib.Path.rglob() to find relevant files.
 - For error identification tasks: grep the repository for the EXACT API ENDPOINT OR SDK in the error URL.
   Example for a GoogleGenerativeAI / generativelanguage.googleapis.com error:
-    PRIMARY keywords (search for these first — they identify the CALLING function, not config):
-      'generativelanguage.googleapis.com'  ← the actual HTTP call
-      'GoogleGenerativeAI('                ← SDK instantiation
-      'getGenerativeModel'                 ← SDK model call
+    PRIMARY keywords (identify the CALLING function, not config helpers):
+      'generativelanguage.googleapis.com'   <- the actual HTTP call
+      'GoogleGenerativeAI('                 <- SDK instantiation
+      'getGenerativeModel'                  <- SDK model call
     SECONDARY keywords (use only if primary not found):
       'GEMINI_API_KEY', '@google/generative-ai'
-  Search algorithm:
+  Search + function extraction algorithm (USE THIS EXACT CODE):
+    import re, os
+    primary_keywords = ['generativelanguage.googleapis.com', 'GoogleGenerativeAI(', 'getGenerativeModel']
+    result_file, result_function, result_snippet = None, None, None
     for root, dirs, files in os.walk(repo_path):
         dirs[:] = [d for d in dirs if d not in ['.git', 'node_modules', '__pycache__']]
         for fname in files:
-            if fname.endswith(('.js','.ts','.py','.go','.java','.rb','.php')):
-                content = open(os.path.join(root,fname)).read()
-                for kw in PRIMARY_KEYWORDS:
-                    if kw in content:
-                        # THIS is the file with the API call — report this function
-  Report ONLY files that ACTUALLY contain a PRIMARY keyword. The offending_function must be the
-  function/method that MAKES the API call (e.g. callGemini, generateContent), NOT helper functions
-  that only reference env vars (e.g. loadEnv, configure, init).
-- For fix tasks: ALWAYS read the actual file content before modifying it. Write the modified content
-  back to the SAME path (not /tmp) so git diff can detect the change.
+            if not fname.endswith(('.js','.ts','.py','.go','.java','.rb','.php')): continue
+            fpath = os.path.join(root, fname)
+            try:
+                content = open(fpath, encoding='utf-8', errors='replace').read()
+            except: continue
+            for kw in primary_keywords:
+                if kw in content:
+                    lines = content.split('\\n')
+                    kw_idx = next((i for i,l in enumerate(lines) if kw in l), None)
+                    # Walk BACKWARDS from keyword line to find enclosing function name
+                    func_name = 'unknown'
+                    if kw_idx is not None:
+                        for i in range(kw_idx, -1, -1):
+                            m = re.match(r'\\s*(?:async\\s+)?function\\s+(\\w+)', lines[i])
+                            if m: func_name = m.group(1); break
+                            m = re.match(r'\\s*(?:export\\s+default\\s+)?(?:async\\s+)?function\\s+(\\w+)', lines[i])
+                            if m: func_name = m.group(1); break
+                        result_snippet = '\\n'.join(lines[max(0,kw_idx-2):kw_idx+5])
+                    rel_path = os.path.relpath(fpath, repo_path)
+                    result_file, result_function = rel_path, func_name
+                    break
+            if result_file: break
+        if result_file: break
+  Report the result_file, result_function (from backward search), result_snippet.
+  NEVER report a helper function like loadEnv, configure, init as the offending_function.
 
 CODE FIX RULES — SURGICAL INSERTION (mandatory, no exceptions):
-The ONLY acceptable way to fix code is to INSERT new lines at an anchor point. NEVER delete or
-replace existing code blocks. The file must grow after a fix, never shrink.
+The ONLY acceptable way to fix code is to INSERT new lines after a single anchor line.
+NEVER delete, replace, or rewrite existing code. The file MUST be longer after the fix.
 
-CORRECT pattern (single-line anchor + insertion):
-  with open(file_path, 'r') as f:
+CORRECT insertion pattern:
+  with open(file_path, 'r', encoding='utf-8') as f:
       content = f.read()
-  # Find one exact anchor line (verbatim, with its trailing newline) after which to insert
-  anchor = "    const message = err instanceof Error ? err.message : 'Analysis failed';\n"
-  insertion = (
-      "    if (message.includes('API_KEY_INVALID') || message.includes('API key') ||\n"
-      "        message.includes('expired') || message.includes('key expired')) {{\n"
-      "      return res.status(503).json({{ error: 'API service unavailable — please contact the administrator' }});\n"
-      "    }}\n"
-  )
-  if anchor in content:
-      new_content = content.replace(anchor, anchor + insertion, 1)
-      with open(file_path, 'w') as f:
-          f.write(new_content)
-      # VERIFY: re-read and check file grew
-      with open(file_path, 'r') as f:
-          verified = f.read()
-      assert len(verified) > len(content), "File did not grow — insertion failed"
-      assert insertion.split('\n')[0] in verified, "Inserted line not found — insertion failed"
-      fix_applied = True
+  # Try anchors IN ORDER — use the first one found
+  anchors_and_insertions = [
+      # ANCHOR 1: JavaScript response callback (local-api-server.js pattern)
+      (
+          "          const json = JSON.parse(data);\\n",
+          (
+              "          if (res.statusCode === 400 || res.statusCode === 401 || res.statusCode === 403) {{\\n"
+              "            const apiErr = (json && json.error) ? json.error.message : 'HTTP ' + res.statusCode;\\n"
+              "            if (apiErr.includes('API_KEY_INVALID') || apiErr.includes('API key') || apiErr.includes('expired')) {{\\n"
+              "              return reject(new Error('API service unavailable — please contact the administrator'));\\n"
+              "            }}\\n"
+              "            return reject(new Error('API error ' + res.statusCode + ': ' + apiErr));\\n"
+              "          }}\\n"
+          )
+      ),
+      # ANCHOR 2: TypeScript SDK catch block (api/analyze-closet.ts pattern)
+      (
+          "    const message = err instanceof Error ? err.message : 'Analysis failed';\\n",
+          (
+              "    if (message.includes('API_KEY_INVALID') || message.includes('API key') || message.includes('expired')) {{\\n"
+              "      return res.status(503).json({{ error: 'API service unavailable — please contact the administrator' }});\\n"
+              "    }}\\n"
+          )
+      ),
+      # ANCHOR 3: fallback — any JSON.parse after API call
+      (
+          "        const json = JSON.parse(data);\\n",
+          (
+              "        if (res.statusCode >= 400) {{\\n"
+              "          const apiErr = (json && json.error) ? json.error.message : 'HTTP ' + res.statusCode;\\n"
+              "          return reject(new Error('API service unavailable — ' + apiErr));\\n"
+              "        }}\\n"
+          )
+      ),
+  ]
+  fix_applied = False
+  for anchor, insertion in anchors_and_insertions:
+      if anchor in content:
+          new_content = content.replace(anchor, anchor + insertion, 1)
+          with open(file_path, 'w', encoding='utf-8') as f:
+              f.write(new_content)
+          # Verify
+          with open(file_path, 'r', encoding='utf-8') as f:
+              verified = f.read()
+          if len(verified) > len(content) and insertion.split('\\n')[0] in verified:
+              fix_applied = True
+              original_snippet = anchor
+              fixed_snippet = anchor + insertion
+          break
+  if not fix_applied:
+      fix_description = 'Could not find any anchor — no anchors matched in ' + file_path
 
-WRONG patterns (NEVER use these):
-  BAD: content.replace(multi_line_block, new_block)   # deletes existing code
-  BAD: new_content = header + new_function_body        # rewrites whole function
-  BAD: content = content[:start] + replacement + content[end:]  # removes lines
-
-For api_key_invalid TypeScript/JavaScript — exact anchor and insertion:
-  Anchor (find this exact line in the catch block):
-    "    const message = err instanceof Error ? err.message : 'Analysis failed';\n"
-  OR if not found, try:
-    "    const message = err instanceof Error ? err.message : String(err);\n"
-  Insertion (add AFTER the anchor, before the return):
-    "    if (message.includes('API_KEY_INVALID') || message.includes('API key') || message.includes('expired')) {{\n"
-    "      return res.status(503).json({{ error: 'API service unavailable — please contact the administrator' }});\n"
-    "    }}\n"
-
-For api_key_invalid Python — exact anchor and insertion:
-  Anchor: "    except Exception as e:\n"  or  "    except GoogleAPIError as e:\n"
-  Insertion: "        if 'API_KEY_INVALID' in str(e) or 'API key' in str(e):\n            raise RuntimeError('API service unavailable')\n"
+WRONG patterns (NEVER use these — they delete code):
+  BAD: content.replace(multi_line_block, new_block)
+  BAD: new_content = header + new_function_body
+  BAD: content[:start] + replacement + content[end:]
 
 VERIFICATION (mandatory after every write):
   1. Re-read the file
-  2. Assert len(new) > len(original)  — file must GROW
-  3. Assert the first line of insertion IS in the new content
-  4. If any assertion fails: set fix_applied=False, do NOT write again
+  2. Assert len(verified) > len(original_content) — file MUST grow
+  3. Assert insertion.split('\\n')[0] in verified — first inserted line MUST be present
+  4. If any assertion fails: fix_applied=False, do NOT write again
 """
 
 SYNTH_SYSTEM_PROMPT = """You are synthesising the result of a real code execution into a structured output.
