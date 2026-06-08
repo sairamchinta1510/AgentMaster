@@ -3,7 +3,7 @@ import asyncio, json, sys
 import websockets
 
 BASE_WS = "wss://agentmaster-ouabviezcq-ew.a.run.app"
-RUN_ID  = "ddc161f8-00f7-47b2-ac1c-a73946586c8b"
+RUN_ID  = "2540f19a-aac4-4520-9f60-a3b064b2ebb7"
 
 
 async def main():

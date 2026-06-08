@@ -231,13 +231,20 @@ CORRECT insertion pattern:
   fix_applied = False
   for anchor, insertion in anchors_and_insertions:
       if anchor in content:
+          # IDEMPOTENCY GUARD: skip if first insertion line already present
+          first_inserted_line = insertion.split('\\n')[0]
+          if first_inserted_line in content:
+              fix_applied = True   # already applied in a prior iteration
+              original_snippet = anchor
+              fixed_snippet = anchor + insertion
+              break
           new_content = content.replace(anchor, anchor + insertion, 1)
           with open(file_path, 'w', encoding='utf-8') as f:
               f.write(new_content)
           # Verify
           with open(file_path, 'r', encoding='utf-8') as f:
               verified = f.read()
-          if len(verified) > len(content) and insertion.split('\\n')[0] in verified:
+          if len(verified) > len(content) and first_inserted_line in verified:
               fix_applied = True
               original_snippet = anchor
               fixed_snippet = anchor + insertion
