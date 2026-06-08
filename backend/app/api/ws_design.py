@@ -43,14 +43,14 @@ async def _run_design_critique_node(
         if not target_spec:
             continue
 
-        async def on_fix(instructions: str, iteration: int, _tid=target_id):
+        async def on_fix(instructions: str, iteration: int, _tid=target_id, _spec=target_spec):
             await send("CRITIQUE_FIX", {
                 "agent_id": critique_spec["agent_id"],
                 "target_agent_id": _tid,
                 "iteration": iteration,
                 "fix_instructions": instructions,
             })
-            await redesign_agent(target_spec, instructions)
+            await redesign_agent(_spec, instructions)
 
         result = await executor.run_design_critique(
             agent_spec=target_spec,
@@ -131,13 +131,15 @@ async def ws_design_handler(websocket: WebSocket, pipeline_id: str):
                         {},
                         on_event=send,
                     )
+                    revised_data = (
+                        revised.model_dump()
+                        if hasattr(revised, "model_dump")
+                        else (revised if isinstance(revised, dict) else {})
+                    )
+                    spec.update(revised_data)
                     for j, blueprint_agent in enumerate(_blueprint.get("agents", [])):
                         if blueprint_agent["agent_id"] == spec["agent_id"]:
-                            _blueprint["agents"][j] = (
-                                revised.model_dump()
-                                if hasattr(revised, "model_dump")
-                                else revised
-                            )
+                            _blueprint["agents"][j] = spec
                             break
 
                 await _run_design_critique_node(
