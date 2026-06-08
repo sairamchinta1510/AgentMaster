@@ -138,25 +138,49 @@ Code rules:
 FILESYSTEM SEARCH RULES (mandatory for any agent that identifies files from errors):
 - NEVER guess or infer file paths based on naming conventions or assumptions.
 - ALWAYS search the actual filesystem using os.walk() or pathlib.Path.rglob() to find relevant files.
-- For error identification tasks: grep the repository for the exact SDK/library names, env var names,
-  or function names mentioned in the error. Example for a GoogleGenerativeAI error:
-    keywords = ['@google/generative-ai', 'GoogleGenerativeAI', 'GEMINI_API_KEY', 'generativelanguage']
-    For each file found by os.walk(), open and scan for any of these keywords.
-  Report ONLY files that ACTUALLY contain these strings — never fabricate or guess file paths.
+- For error identification tasks: grep the repository for the EXACT API ENDPOINT OR SDK in the error URL.
+  Example for a GoogleGenerativeAI / generativelanguage.googleapis.com error:
+    PRIMARY keywords (search for these first — they identify the CALLING function, not config):
+      'generativelanguage.googleapis.com'  ← the actual HTTP call
+      'GoogleGenerativeAI('                ← SDK instantiation
+      'getGenerativeModel'                 ← SDK model call
+    SECONDARY keywords (use only if primary not found):
+      'GEMINI_API_KEY', '@google/generative-ai'
+  Search algorithm:
+    for root, dirs, files in os.walk(repo_path):
+        dirs[:] = [d for d in dirs if d not in ['.git', 'node_modules', '__pycache__']]
+        for fname in files:
+            if fname.endswith(('.js','.ts','.py','.go','.java','.rb','.php')):
+                content = open(os.path.join(root,fname)).read()
+                for kw in PRIMARY_KEYWORDS:
+                    if kw in content:
+                        # THIS is the file with the API call — report this function
+  Report ONLY files that ACTUALLY contain a PRIMARY keyword. The offending_function must be the
+  function/method that MAKES the API call (e.g. callGemini, generateContent), NOT helper functions
+  that only reference env vars (e.g. loadEnv, configure, init).
 - For fix tasks: ALWAYS read the actual file content before modifying it. Write the modified content
   back to the SAME path (not /tmp) so git diff can detect the change.
 
 CODE FIX RULES (mandatory for any agent that modifies source files):
 - NEVER rename environment variables (e.g. GEMINI_API_KEY must stay GEMINI_API_KEY).
 - NEVER introduce placeholder text like YOUR_NEW_, PLACEHOLDER, TODO_REPLACE in the fix.
-- For api_key_invalid errors: wrap the API call in a try/except (Python) or try/catch (JS/TS)
-  that checks if the error message contains 'API_KEY_INVALID' or status 400/401/403 and returns
-  a clear user-facing message like: 'API service unavailable — please contact the administrator'.
-- Use Python's str.replace() or re.sub() with EXACT matching strings from the file to apply patches.
-  If the exact snippet is not found, search for the surrounding context (function name, line above/below)
-  and apply the patch at the correct location.
-- After writing the file, verify the change by re-reading it and checking the new content is present.
-- Set fix_applied=True only if the file was actually written AND the new content was verified.
+- For api_key_invalid errors in JavaScript/Node.js: inside the HTTP response callback, AFTER parsing
+  the JSON response, ADD a status code check before accessing response data:
+    if (res.statusCode === 400 || res.statusCode === 401 || res.statusCode === 403) {{
+      const errMsg = json?.error?.message || `HTTP ${{res.statusCode}}`;
+      if (errMsg.includes('API_KEY_INVALID') || errMsg.includes('API key')) {{
+        return reject(new Error('API service unavailable — please contact the administrator'));
+      }}
+      return reject(new Error(`API error ${{res.statusCode}}: ${{errMsg}}`));
+    }}
+  Insert this block IMMEDIATELY AFTER the line `const json = JSON.parse(data);` and BEFORE
+  any line that accesses `json.candidates` or `json.content`.
+- For api_key_invalid errors in Python: inside the except/except block after the API call,
+  add a specific check: `if 'API_KEY_INVALID' in str(e): raise RuntimeError('API service unavailable')`
+- Use str.replace() with EXACT verbatim strings from the file. Read the file first, find the exact
+  lines to replace, then call content.replace(exact_old, new_with_addition, 1).
+- After writing the file, verify: re-read it and assert the new content is present.
+- Set fix_applied=True ONLY if the file was actually written AND the new content was verified.
 """
 
 SYNTH_SYSTEM_PROMPT = """You are synthesising the result of a real code execution into a structured output.
