@@ -58,6 +58,16 @@ you must:
 - Law 5 SELF-DESCRIBING: Agent can describe itself, its purpose, inputs, outputs
 - Law 6 ISOLATED: Agents cannot access data outside their declared input contract
 
+## CANONICAL SCHEMA FIELD NAMES (MANDATORY — use these exact names, never invent alternatives)
+When designing agents, ALWAYS use these field names in input_schema / output_schema:
+- Git repository URL input  → field name MUST be: "git_repo_url"   (NEVER: repo_url, git_url, repository_url, clone_url)
+- Cloned repo path output   → field name MUST be: "repository_path" (NEVER: local_repo_path, repo_path, clone_path, directory_path, cloned_repo_path, local_path)
+- Cloned repo path input    → field name MUST be: "repository_path" (same — downstream agents inherit this name)
+- Error message input       → field name MUST be: "error_message"   (NEVER: error, err_msg, log_error)
+- File to fix input         → field name MUST be: "offending_file_path"
+These names map directly to environment variables (uppercased) read by the agent code.
+Using any other name will cause the agent to fail at runtime.
+
 ## OUTPUT FORMAT (in-scope objectives only)
 Respond with a JSON object ONLY — no markdown, no prose:
 {
