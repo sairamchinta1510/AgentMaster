@@ -341,8 +341,22 @@ async def ws_run_handler(websocket: WebSocket, run_id: str):
             )
 
         final_results = [results[agent["agent_id"]] for agent in ordered_agents if agent["agent_id"] in results]
-        failed = [result for result in final_results if result.status == "failed"]
-        final_status = "failed" if failed else "completed"
+        # Only task agents (not critique nodes) determine overall run status
+        task_failures = [
+            r for r in final_results
+            if r.status == "failed"
+            and not r.agent_id.startswith("_autocritique_")
+            and not r.agent_id.startswith("_autocritic_")
+            and results.get(r.agent_id) and results[r.agent_id].error
+            and not str(results[r.agent_id].error or "").startswith("Skipped:")
+        ]
+        # Also count non-critique agents explicitly in ordered_agents
+        explicit_task_ids = {
+            a["agent_id"] for a in ordered_agents
+            if a.get("agent_type") != "critique" and not a["agent_id"].startswith("_")
+        }
+        true_task_failures = [r for r in final_results if r.agent_id in explicit_task_ids and r.status == "failed"]
+        final_status = "failed" if true_task_failures else "completed"
 
         run.status = final_status
         run.results = [result.model_dump() for result in final_results]
@@ -355,7 +369,7 @@ async def ws_run_handler(websocket: WebSocket, run_id: str):
                 "status": final_status,
                 "total_agents": len(ordered_agents),
                 "completed": len([result for result in final_results if result.status == "completed"]),
-                "failed": len(failed),
+                "failed": len(true_task_failures),
                 "results": [result.model_dump() for result in final_results],
             },
         )
