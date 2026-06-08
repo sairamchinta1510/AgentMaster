@@ -56,6 +56,35 @@ async def _search_error_solutions(error: str) -> str:
         return ""
 
 
+def _fuzzy_match_key(field: str, context: dict) -> str | None:
+    """Find the best matching context key for an input schema field name.
+
+    Used when the schema field name (e.g. 'codebase_analysis_report') doesn't
+    exactly match the upstream output key (e.g. 'analysis_report').
+    Returns the best-matching context key, or None if no good match found.
+    """
+    field_lower = field.lower()
+    # 1. Exact match (case-insensitive)
+    for k in context:
+        if k.lower() == field_lower:
+            return k
+    # 2. Word-overlap: split on '_', require ≥50% overlap
+    field_words = set(field_lower.split("_"))
+    best_k: str | None = None
+    best_score = 0.0
+    for k in context:
+        if k.startswith("_"):
+            continue
+        k_words = set(k.lower().split("_"))
+        overlap = len(field_words & k_words)
+        if overlap == 0:
+            continue
+        score = overlap / max(len(field_words), len(k_words))
+        if score > best_score and score >= 0.5:
+            best_k, best_score = k, score
+    return best_k
+
+
 def _make_llm_client() -> tuple[AsyncOpenAI, str]:
     client = AsyncOpenAI(
         api_key=settings.active_api_key,
@@ -169,6 +198,32 @@ class AgentExecutorAgent:
                 await on_code_event(agent_id, phase, code_preview)
 
         try:
+            # ── Build env vars early (needed for plan prompt) ─────────────────
+            # Inject ALL context inputs as uppercased env vars so generated code
+            # can read any input (paths, URLs, names, credentials) via os.environ.
+            env_vars: dict[str, str] = {
+                k.upper(): str(v)
+                for k, v in context_inputs.items()
+                if not k.startswith("_") and v is not None
+            }
+
+            # Also inject aliases for input schema fields that don't exactly match
+            # the context keys (e.g. schema says 'codebase_analysis_report' but
+            # upstream output is 'analysis_report').
+            input_schema_fields = list(agent_spec.get("input_schema", {}).keys()) if isinstance(
+                agent_spec.get("input_schema"), dict
+            ) else []
+            for field in input_schema_fields:
+                upper = field.upper()
+                if upper not in env_vars:
+                    matched = _fuzzy_match_key(field, context_inputs)
+                    if matched is not None:
+                        env_vars[upper] = str(context_inputs[matched])
+                        logger.info(
+                            "[%s] aliased env var %s -> context key '%s'",
+                            agent_id, upper, matched,
+                        )
+
             # ── PLAN phase ───────────────────────────────────────────────────
             await emit("planning")
 
@@ -178,6 +233,9 @@ class AgentExecutorAgent:
                 f"Input Schema: {json.dumps(agent_spec.get('input_schema', {}), indent=2)}\n"
                 f"Output Schema: {json.dumps(agent_spec.get('output_schema', {}), indent=2)}\n"
                 f"Available Inputs: {json.dumps(context_inputs, indent=2)}\n\n"
+                f"IMPORTANT — Exact env var names available for os.environ: "
+                f"{', '.join(sorted(k for k in env_vars if not k.startswith('_')))}\n"
+                "Use ONLY the exact env var names listed above — do not invent names.\n\n"
                 "Decide: NO_CODE_NEEDED (return output directly) or EXECUTE_CODE (write Python)."
             )
 
@@ -264,13 +322,7 @@ class AgentExecutorAgent:
             # ── EXEC phase ───────────────────────────────────────────────────
             code = plan.get("code", "")
 
-            # Inject ALL context inputs as uppercased env vars so generated code
-            # can read any input (paths, URLs, names, credentials) via os.environ.
-            env_vars: dict[str, str] = {
-                k.upper(): str(v)
-                for k, v in context_inputs.items()
-                if not k.startswith("_") and v is not None
-            }
+            # env_vars already built above (before plan prompt)
 
             last_error: str = ""
             plan_prompt_base = plan_prompt  # keep for retry re-plan
