@@ -523,15 +523,30 @@ class AgentExecutorAgent:
             _out_keys = set(output_schema_keys)
             _in_keys  = set(k.lower() for k in env_vars)
 
-            if "py_count" in _out_keys and "html_count" in _out_keys:
+            # Detect file-counting agents: any agent that has REPOSITORY_PATH as input
+            # AND whose output schema has file/count related keys (any variant)
+            _file_count_output_keys = {
+                "py_count", "html_count", "python_files_count", "html_files_count",
+                "python_count", "html_count", "analysis_report", "analysis_summary",
+            }
+            _is_file_counter = (
+                "repository_path" in _in_keys
+                and bool(_out_keys & _file_count_output_keys)
+                and "git_repo_url" not in _in_keys  # don't match git-clone agents
+            )
+
+            if _is_file_counter:
                 # File-counting agent — always use verbatim template
+                # Output ALL common field name variants so the synthesiser can match any schema
                 logger.info("[%s] Injecting deterministic FILE COUNTING template", agent_id)
                 code = (
                     "import os, glob as _glob, json\n"
                     "repo_path = os.environ.get('REPOSITORY_PATH', '')\n"
                     "if not repo_path:\n"
                     "    print(json.dumps({'py_count': 0, 'html_count': 0, "
-                    "'analysis_report': 'REPOSITORY_PATH not set'}))\n"
+                    "'python_files_count': 0, 'html_files_count': 0, "
+                    "'analysis_report': 'REPOSITORY_PATH not set', "
+                    "'analysis_summary': 'REPOSITORY_PATH not set'}))\n"
                     "else:\n"
                     "    py_files   = [f for f in _glob.glob("
                     "os.path.join(repo_path, '**', '*.py'),   recursive=True) "
@@ -539,7 +554,8 @@ class AgentExecutorAgent:
                     "    html_files = [f for f in _glob.glob("
                     "os.path.join(repo_path, '**', '*.html'), recursive=True) "
                     "if '.git' not in f]\n"
-                    "    print(f'Found {len(py_files)} .py and {len(html_files)} .html', "
+                    "    print('Found ' + str(len(py_files)) + ' .py and ' + "
+                    "str(len(html_files)) + ' .html files', "
                     "file=__import__('sys').stderr)\n"
                     "    def _describe(p):\n"
                     "        try:\n"
@@ -557,8 +573,15 @@ class AgentExecutorAgent:
                     "'\\n'.join('  ' + i['file'] + ': ' + i['description'] for i in py_info)\n"
                     "    report += '\\n\\nHTML files:\\n' + "
                     "'\\n'.join('  ' + i['file'] + ': ' + i['description'] for i in html_info)\n"
-                    "    print(json.dumps({'py_count': len(py_files), "
-                    "'html_count': len(html_files), 'analysis_report': report}))\n"
+                    "    print(json.dumps({\n"
+                    "        'py_count': len(py_files),\n"
+                    "        'html_count': len(html_files),\n"
+                    "        'python_files_count': len(py_files),\n"
+                    "        'html_files_count': len(html_files),\n"
+                    "        'python_count': len(py_files),\n"
+                    "        'analysis_report': report,\n"
+                    "        'analysis_summary': report,\n"
+                    "    }))\n"
                 )
             elif "repository_path" in _out_keys and "git_repo_url" in _in_keys:
                 # Git-clone agent — always use verbatim template
