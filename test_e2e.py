@@ -4,7 +4,7 @@ import websockets
 
 BASE_WS   = "wss://agentmaster-ouabviezcq-ew.a.run.app"
 BASE_HTTP = "https://agentmaster-ouabviezcq-ew.a.run.app"
-PIPELINE_ID = "8acecf7c-9be0-40a8-8881-89cbfc800f8e"
+PIPELINE_ID = "509b817e-9e4a-4f08-8056-82533ec09e83"
 GIT_REPO    = "https://github.com/sairamchinta1510/eu-dress-code.git"
 
 # ── Stats trackers ────────────────────────────────────────────────────────────
@@ -248,10 +248,15 @@ async def main():
 
     # Run
     run_id = await create_run(PIPELINE_ID, {
-        "clone_url": GIT_REPO,
-        "repository_url": GIT_REPO,
-        "repo_url": GIT_REPO,
-        "git_repo_url": GIT_REPO,
+        "clone_url":                GIT_REPO,
+        "repository_url":           GIT_REPO,
+        "repo_url":                 GIT_REPO,
+        "git_repo_url":             GIT_REPO,
+        "error_message":            "[GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent: [400 Bad Request] API key expired. Please renew the API key.",
+        "log_data":                 "[GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent: [400 Bad Request] API key expired. Please renew the API key.",
+        "alert_message":            "[GoogleGenerativeAI Error]: API key expired. Please renew the API key.",
+        "log_pattern_for_errors":   "error|Error|ERROR|exception|Exception|EXCEPTION",
+        "log_pattern_for_warnings": "warn|Warn|WARN|warning|Warning",
     })
     run_result = await run_pipeline(run_id)
     print_stats()
