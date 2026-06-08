@@ -492,11 +492,17 @@ class AgentExecutorAgent:
                 code = code.replace(f"os.environ['{alias}']", "os.environ['REPOSITORY_PATH']")
                 code = code.replace(f'os.environ.get("{alias}"', 'os.environ.get("REPOSITORY_PATH"')
                 code = code.replace(f"os.environ.get('{alias}'", "os.environ.get('REPOSITORY_PATH'")
-            # Replace hard raise statements with stderr warnings so agent doesn't crash
+            # Replace ALL raise forms with stderr warnings so agents never crash:
+            #   raise ValueError("msg")  raise e  raise ex  raise  raise SomeError from e
             import re as _re
+            def _neutralise_raise(m: "_re.Match[str]") -> str:
+                indent = m.group(1)
+                rest   = (m.group(2) or "").strip()
+                label  = rest[:80].replace("'", "\\'") if rest else "exception"
+                return f"{indent}print('WARNING: suppressed raise {label}', file=__import__('sys').stderr)"
             code = _re.sub(
-                r'^\s*raise\s+\w+\([^\n]*\)\s*$',
-                lambda m: m.group(0).replace("raise ", "print('WARNING: skipped raise — ', file=__import__('sys').stderr)  # "),
+                r'^(\s*)raise(\s+\S[^\n]*|(?=\s*$))',
+                _neutralise_raise,
                 code, flags=_re.MULTILINE,
             )
 
@@ -578,8 +584,8 @@ class AgentExecutorAgent:
                         code = code.replace(f'os.environ.get("{alias}"', 'os.environ.get("REPOSITORY_PATH"')
                         code = code.replace(f"os.environ.get('{alias}'", "os.environ.get('REPOSITORY_PATH'")
                     code = _re.sub(
-                        r'^\s*raise\s+\w+\([^\n]*\)\s*$',
-                        lambda m: m.group(0).replace("raise ", "print('WARNING: skipped raise — ', file=__import__('sys').stderr)  # "),
+                        r'^(\s*)raise(\s+\S[^\n]*|(?=\s*$))',
+                        _neutralise_raise,
                         code, flags=_re.MULTILINE,
                     )
 
