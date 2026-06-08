@@ -12,12 +12,12 @@ Your job: evaluate the agent against industry best standards for its specific do
 Be precise and actionable. Never fix the code yourself — only give instructions.
 
 Return ONLY valid JSON:
-{{
+{
   "verdict": "APPROVED" or "NEEDS_FIX",
   "quality_score": <1-10>,
   "issues": ["specific issue 1", ...],
   "fix_instructions": "Precise instructions for the agent to fix its approach. Empty string if APPROVED."
-}}"""
+}"""
 
 
 def build_design_critique_prompt(
@@ -56,7 +56,7 @@ def build_run_critique_prompt(
     stderr: str,
     returncode: int,
 ) -> str:
-    output_keys = list(output_schema.keys())
+    output_keys = [k.upper() for k in output_schema.keys()]
     input_keys_upper = [k.upper() for k in input_schema.keys()]
 
     return f"""{_CRITIQUE_SYSTEM}
@@ -71,7 +71,7 @@ Output Schema: {json.dumps(output_schema, indent=2)}
 Actual inputs available (as env vars): {json.dumps(actual_inputs, indent=2)}
 Code executed:
 ```python
-{code[:1000]}
+{code[:1000] + ("\n... (truncated)" if len(code) > 1000 else "")}
 ```
 Stdout: {stdout[:500] or "(empty)"}
 Stderr: {stderr[:500] or "(none)"}
