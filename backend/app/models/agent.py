@@ -40,10 +40,10 @@ class CritiqueVerdict(str, Enum):
 class CritiqueIssue(BaseModel):
     issue_id: str
     severity: str  # critical | major | minor | informational
-    category: str
-    description: str
-    impact: str
-    recommendation: str
+    category: str = ""
+    description: str = ""
+    impact: str = ""
+    recommendation: str = ""
     effort_estimate: str = "medium"  # low | medium | high
     auto_fixable: bool = False
 
