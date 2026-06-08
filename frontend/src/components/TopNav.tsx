@@ -13,7 +13,7 @@ export function TopNav() {
   const isPipelinesRoute = !isDesignRoute && !isRunRoute;
 
   const canDesign = !!pipelineId;
-  const canRun = !!pipelineId;
+  const canRun = !!pipelineId && designComplete;
 
   const isDesigning = designConnected && !designComplete;
   const isRunning = runConnected && !runComplete;
@@ -60,7 +60,7 @@ export function TopNav() {
         <button
           className={tabCls(isRunRoute, !canRun, "border-b-green-400 text-green-300")}
           onClick={() => canRun && navigate(`/run/${pipelineId}`)}
-          title={!canRun ? "Select a pipeline first" : undefined}
+          title={!pipelineId ? "Select a pipeline first" : !designComplete ? "Waiting for design to complete…" : undefined}
         >
           ▶ Run
           {isRunning && (

@@ -65,6 +65,9 @@ export function useDesignWS(pipelineId: string | null, trigger: number = -1) {
           store.setComplete(true);
           store.setPhaseMessage("Design complete — all agents approved");
           break;
+        case "BLUEPRINT_READY":
+          store.setPhaseMessage("Blueprint ready — running critiques…");
+          break;
         default:
           break;
       }
