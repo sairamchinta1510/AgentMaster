@@ -135,3 +135,84 @@ def test_ws_design_replaces_decomposed_node_with_series():
     assert design_complete["agent_count"] == 4
     assert design_complete["approved_count"] == 4
     assert design_complete["message"] == "Design complete. 4/4 agents approved."
+
+
+def test_ws_design_redesign_mutates_target_spec_in_place():
+    from app.agents.runtime_critique import CritiqueLoopResult
+
+    blueprint = {
+        "agents": [
+            {
+                "agent_id": "target",
+                "agent_name": "TargetAgent",
+                "agent_type": "task",
+                "description": "original description",
+                "input_schema": {"repo": {"type": "string"}},
+                "output_schema": {"result": {"type": "string"}},
+            },
+            {
+                "agent_id": "critique",
+                "agent_name": "CritiqueAgent",
+                "agent_type": "critique",
+                "depends_on": ["target"],
+            },
+        ],
+        "edges": [{"from": "target", "to": "critique"}],
+        "required_inputs": [],
+        "trigger_config": {"mode": "manual"},
+    }
+    target_agent = AtomicAgent(agent_id="target", agent_name="TargetAgent", session_id="s1")
+    revised_target = AtomicAgent(
+        agent_id="target",
+        agent_name="TargetAgent",
+        session_id="s1",
+        description="improved description",
+        input_schema={"repo": {"type": "string", "description": "Repository URL"}},
+        output_schema={"result": {"type": "string"}},
+    )
+
+    class VerifyingExecutor:
+        async def run_design_critique(
+            self,
+            agent_spec,
+            min_iterations,
+            max_iterations,
+            on_fix_needed,
+            on_event,
+        ):
+            assert agent_spec["description"] == "original description"
+            await on_fix_needed("Improve the design", 1)
+            assert agent_spec["description"] == "improved description"
+            return CritiqueLoopResult(verdict="APPROVED", quality_score=9.0, iterations=3)
+
+    with TestClient(app) as client:
+        pipeline_id = client.post("/api/pipelines", json={"objective": "Test design critique mutation"}).json()["id"]
+
+        with (
+            patch.object(settings, "gemini_api_key", "test-key"),
+            patch.object(settings, "openai_api_key", ""),
+            patch.object(AgentMasterAgent, "design_blueprint_raw", new=AsyncMock(return_value=blueprint)),
+            patch.object(
+                AgentProducerAgent,
+                "produce",
+                new=AsyncMock(side_effect=[target_agent, revised_target]),
+            ),
+            patch(
+                "app.api.ws_design.run_critique_loop",
+                new=AsyncMock(return_value=(_approved_critique("target", "TargetAgent"), [target_agent], 1)),
+            ),
+            patch("app.api.ws_design.CritiqueNodeExecutor", return_value=VerifyingExecutor()),
+            patch("app.api.ws_design.backup_to_gcs"),
+            patch("app.scheduler.unregister_pipeline_schedule"),
+        ):
+            with client.websocket_connect(f"/ws/design/{pipeline_id}") as websocket:
+                events = []
+                for _ in range(30):
+                    event = websocket.receive_json()
+                    events.append(event)
+                    if event["type"] in {"DESIGN_COMPLETE", "ERROR"}:
+                        break
+                else:
+                    raise AssertionError("WebSocket design flow did not finish within 30 events")
+
+    assert events[-1]["type"] == "DESIGN_COMPLETE"

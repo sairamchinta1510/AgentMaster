@@ -285,3 +285,63 @@ async def test_design_critique_node_calls_design_critique():
         )
 
     mock_executor.run_design_critique.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_design_critique_node_freezes_target_spec_for_on_fix():
+    """Deferred fix callbacks should redesign the originally targeted spec."""
+    from app.api.ws_design import _run_design_critique_node
+    from app.agents.runtime_critique import CritiqueLoopResult
+
+    redesign_calls = []
+
+    async def redesign_agent(spec, fix_instructions):
+        redesign_calls.append((spec["agent_id"], fix_instructions))
+
+    class DelayedFixExecutor:
+        def __init__(self):
+            self._pending_callback = None
+
+        async def run_design_critique(
+            self,
+            agent_spec,
+            min_iterations,
+            max_iterations,
+            on_fix_needed,
+            on_event,
+        ):
+            if self._pending_callback is None:
+                self._pending_callback = on_fix_needed
+            else:
+                await self._pending_callback("Fix the first target", 1)
+            return CritiqueLoopResult(verdict="APPROVED", quality_score=9.0, iterations=1)
+
+    with patch("app.api.ws_design.CritiqueNodeExecutor", return_value=DelayedFixExecutor()):
+        await _run_design_critique_node(
+            critique_spec={
+                "agent_id": "c1",
+                "agent_name": "CritiqueClone",
+                "agent_type": "critique",
+                "depends_on": ["clone_001", "scan_001"],
+            },
+            agent_specs=[
+                {
+                    "agent_id": "clone_001",
+                    "agent_name": "CloneRepo",
+                    "description": "Clones a git repo",
+                    "input_schema": {"clone_url": {"type": "string"}},
+                    "output_schema": {"repository_path": {"type": "string"}},
+                },
+                {
+                    "agent_id": "scan_001",
+                    "agent_name": "ScanRepo",
+                    "description": "Scans a git repo",
+                    "input_schema": {"repository_path": {"type": "string"}},
+                    "output_schema": {"summary": {"type": "string"}},
+                },
+            ],
+            send=AsyncMock(),
+            redesign_agent=redesign_agent,
+        )
+
+    assert redesign_calls == [("clone_001", "Fix the first target")]
