@@ -4,7 +4,7 @@ import websockets
 
 BASE_WS   = "wss://agentmaster-ouabviezcq-ew.a.run.app"
 BASE_HTTP = "https://agentmaster-ouabviezcq-ew.a.run.app"
-PIPELINE_ID = "509b817e-9e4a-4f08-8056-82533ec09e83"
+PIPELINE_ID = "215a83ac-1350-426f-b85d-f3b264f6d313"
 GIT_REPO    = "https://github.com/sairamchinta1510/eu-dress-code.git"
 
 # ── Stats trackers ────────────────────────────────────────────────────────────

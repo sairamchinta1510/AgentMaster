@@ -134,6 +134,17 @@ Code rules:
 - NEVER run: rm -rf, kill, shutdown, or any destructive shell command
 - Use only pre-installed packages: httpx, requests, boto3, google-cloud-logging,
   google-cloud-monitoring, PyGithub, kubernetes, subprocess, glob, pathlib, json, os, sys, datetime
+
+FILESYSTEM SEARCH RULES (mandatory for any agent that identifies files from errors):
+- NEVER guess or infer file paths based on naming conventions or assumptions.
+- ALWAYS search the actual filesystem using os.walk() or pathlib.Path.rglob() to find relevant files.
+- For error identification tasks: grep the repository for the exact SDK/library names, env var names,
+  or function names mentioned in the error. Example for a GoogleGenerativeAI error:
+    keywords = ['@google/generative-ai', 'GoogleGenerativeAI', 'GEMINI_API_KEY', 'generativelanguage']
+    For each file found by os.walk(), open and scan for any of these keywords.
+  Report ONLY files that ACTUALLY contain these strings — never fabricate or guess file paths.
+- For fix tasks: ALWAYS read the actual file content before modifying it. Write the modified content
+  back to the SAME path (not /tmp) so git diff can detect the change.
 """
 
 SYNTH_SYSTEM_PROMPT = """You are synthesising the result of a real code execution into a structured output.
