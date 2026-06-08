@@ -522,17 +522,27 @@ class AgentExecutorAgent:
             # generating broken code that always returns 0 or fails with syntax errors.
             _out_keys = set(output_schema_keys)
             _in_keys  = set(k.lower() for k in env_vars)
+            _agent_name_lower = agent_name.lower()
 
-            # Detect file-counting agents: any agent that has REPOSITORY_PATH as input
-            # AND whose output schema has file/count related keys (any variant)
-            _file_count_output_keys = {
+            # Detect file-counting agents by ANY of:
+            # 1. Exact output key match (common variants)
+            # 2. Any output key name containing "file" or "count"
+            # 3. Agent name contains file-count keywords
+            _file_count_exact_keys = {
                 "py_count", "html_count", "python_files_count", "html_files_count",
-                "python_count", "html_count", "analysis_report", "analysis_summary",
+                "python_count", "analysis_report", "analysis_summary", "file_counts",
+                "file_count", "files_count", "py_files", "html_files",
             }
+            _file_count_name_kws = ["counter", "file count", "file_count", "filecount",
+                                     "count file", "count_file", "analyzer", "analyser"]
             _is_file_counter = (
                 "repository_path" in _in_keys
-                and bool(_out_keys & _file_count_output_keys)
                 and "git_repo_url" not in _in_keys  # don't match git-clone agents
+                and (
+                    bool(_out_keys & _file_count_exact_keys)
+                    or any("file" in k.lower() or "count" in k.lower() for k in _out_keys)
+                    or any(kw in _agent_name_lower for kw in _file_count_name_kws)
+                )
             )
 
             if _is_file_counter:
@@ -581,6 +591,8 @@ class AgentExecutorAgent:
                     "        'python_count': len(py_files),\n"
                     "        'analysis_report': report,\n"
                     "        'analysis_summary': report,\n"
+                    "        'file_counts': {'python_files': len(py_files), 'html_files': len(html_files)},\n"
+                    "        'file_count': {'python': len(py_files), 'html': len(html_files)},\n"
                     "    }))\n"
                 )
             elif "repository_path" in _out_keys and "git_repo_url" in _in_keys:
