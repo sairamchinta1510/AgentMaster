@@ -177,6 +177,11 @@ class AgentExecutorAgent:
                 "Decide: NO_CODE_NEEDED (return output directly) or EXECUTE_CODE (write Python)."
             )
 
+            # Inject critique fix instructions if this is a critique-driven re-run
+            critique_fix = context_inputs.get("_critique_fix_instructions", "")
+            if critique_fix:
+                plan_prompt += f"\n\nCRITIQUE AGENT INSTRUCTION:\n{critique_fix}\nYou MUST address this in your implementation."
+
             plan_response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[

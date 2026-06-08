@@ -5,8 +5,9 @@ from fastapi import WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 from app.db import SessionLocal
 from app.agents.agent_executor import AgentExecutorAgent
+from app.agents.runtime_critique import CritiqueNodeExecutor
 from app.models.pipeline import PipelineORM
-from app.models.run import RunORM
+from app.models.run import AgentResult, RunORM
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -30,6 +31,141 @@ def _topological_order(agents: list[dict]) -> list[dict]:
     for agent in agents:
         visit(agent["agent_id"])
     return order
+
+
+async def _run_critique_node(
+    critique_spec: dict,
+    ordered_agents: list[dict],
+    results: dict,
+    context: dict,
+    send,
+    rerun_agent,
+) -> None:
+    """Execute a critique node: validate each depends_on agent's result via LLM."""
+    agent_map = {a["agent_id"]: a for a in ordered_agents}
+    deps = critique_spec.get("depends_on", [])
+    critique_agent_id = critique_spec["agent_id"]
+    critique_agent_name = critique_spec.get("agent_name", "Critique")
+
+    def _store_and_payload(
+        *,
+        status: str,
+        output: dict,
+        error: str | None,
+    ) -> dict:
+        result = AgentResult(
+            agent_id=critique_agent_id,
+            agent_name=critique_agent_name,
+            status=status,
+            output=output,
+            error=error,
+            duration_ms=0,
+        )
+        results[critique_agent_id] = result
+        return {
+            "agent_id": critique_agent_id,
+            "agent_name": critique_agent_name,
+            "status": result.status,
+            "output": result.output,
+            "error": result.error,
+            "duration_ms": result.duration_ms,
+        }
+
+    if not deps:
+        await send(
+            "AGENT_RESULT",
+            _store_and_payload(
+                status="completed",
+                output={"critique_verdict": "SKIPPED", "reason": "no depends_on"},
+                error=None,
+            ),
+        )
+        return
+
+    executor = CritiqueNodeExecutor()
+    processed_targets = False
+    target_summaries: list[dict] = []
+    aggregate_status = "completed"
+    aggregate_verdict = "APPROVED"
+    aggregate_quality_score = 0.0
+    aggregate_iterations = 0
+    aggregate_issues: list[str] = []
+    aggregate_errors: list[str] = []
+
+    for target_id in deps:
+        target_spec = agent_map.get(target_id)
+        if not target_spec:
+            continue
+
+        processed_targets = True
+
+        async def on_fix(instructions: str, iteration: int, _target_id=target_id):
+            await send(
+                "CRITIQUE_FIX",
+                {
+                    "agent_id": critique_agent_id,
+                    "target_agent_id": _target_id,
+                    "iteration": iteration,
+                    "fix_instructions": instructions,
+                },
+            )
+            await rerun_agent(target_spec, context, instructions)
+
+        result = await executor.run_exec_critique(
+            agent_spec=target_spec,
+            actual_inputs=context,
+            code=lambda _target_id=target_id: ((getattr(results.get(_target_id), "output", None) or {}).get("_code", "")),
+            stdout=lambda _target_id=target_id: ((getattr(results.get(_target_id), "output", None) or {}).get("_stdout_preview", "")),
+            stderr=lambda _target_id=target_id: (getattr(results.get(_target_id), "error", "") or ""),
+            returncode=lambda _target_id=target_id: 1 if getattr(results.get(_target_id), "status", "completed") == "failed" else 0,
+            min_iterations=3,
+            max_iterations=5 if getattr(results.get(target_id), "status", "completed") == "failed" else 3,
+            on_fix_needed=on_fix,
+            on_event=send,
+        )
+
+        target_summary = {
+            "target_agent": target_id,
+            "critique_verdict": result.verdict,
+            "quality_score": result.quality_score,
+            "iterations": result.iterations,
+            "issues": result.issues,
+        }
+        target_summaries.append(target_summary)
+        aggregate_quality_score = min(aggregate_quality_score, result.quality_score) if target_summaries[:-1] else result.quality_score
+        aggregate_iterations += result.iterations
+        aggregate_issues.extend(result.issues)
+        if result.verdict == "NEEDS_FIX":
+            aggregate_status = "failed"
+            aggregate_verdict = "NEEDS_FIX"
+            if result.fix_instructions:
+                aggregate_errors.append(f"{target_id}: {result.fix_instructions}")
+
+    if not processed_targets:
+        await send(
+            "AGENT_RESULT",
+            _store_and_payload(
+                status="completed",
+                output={"critique_verdict": "SKIPPED", "reason": "no target results"},
+                error=None,
+            ),
+        )
+        return
+
+    await send(
+        "AGENT_RESULT",
+        _store_and_payload(
+            status=aggregate_status,
+            output={
+                "critique_verdict": aggregate_verdict,
+                "quality_score": aggregate_quality_score,
+                "iterations": aggregate_iterations,
+                "issues": aggregate_issues,
+                "targets": target_summaries,
+            },
+            error="\n".join(aggregate_errors) if aggregate_errors else None,
+        ),
+    )
 
 
 async def ws_run_handler(websocket: WebSocket, run_id: str):
@@ -74,7 +210,7 @@ async def ws_run_handler(websocket: WebSocket, run_id: str):
         ordered_agents = _topological_order(agents)
 
         executor = AgentExecutorAgent()
-        results = []
+        results: dict[str, AgentResult] = {}
         failed_agent_ids: set[str] = set()
         context: dict = dict(run.inputs or {})
         start_ms = int(time.time() * 1000)
@@ -87,7 +223,6 @@ async def ws_run_handler(websocket: WebSocket, run_id: str):
             if failed_deps:
                 skip_msg = f"Skipped: upstream agent(s) failed — {', '.join(failed_deps)}"
                 logger.warning("Skipping %s because of failed deps: %s", agent_id, failed_deps)
-                from app.models.run import AgentResult
                 skipped_result = AgentResult(
                     agent_id=agent_id,
                     agent_name=agent_spec.get("agent_name", agent_id),
@@ -96,7 +231,7 @@ async def ws_run_handler(websocket: WebSocket, run_id: str):
                     error=skip_msg,
                     duration_ms=0,
                 )
-                results.append(skipped_result)
+                results[agent_id] = skipped_result
                 failed_agent_ids.add(agent_id)
                 await send(
                     "AGENT_RESULT",
@@ -130,8 +265,33 @@ async def ws_run_handler(websocket: WebSocket, run_id: str):
                     },
                 )
 
+            # ── Critique node dispatch ────────────────────────────────────────
+            if agent_spec.get("agent_type") == "critique":
+                async def _rerun(spec, ctx, fix_instr):
+                    rerun_result = await executor.execute(
+                        {**spec, "_critique_fix": fix_instr},
+                        {**ctx, "_critique_fix_instructions": fix_instr},
+                        on_code_event=_on_code_event,
+                    )
+                    results[spec["agent_id"]] = rerun_result
+                    if rerun_result.status != "failed":
+                        context.update(rerun_result.output or {})
+
+                await _run_critique_node(
+                    critique_spec=agent_spec,
+                    ordered_agents=ordered_agents,
+                    results=results,
+                    context=context,
+                    send=send,
+                    rerun_agent=_rerun,
+                )
+                critique_result = results.get(agent_id)
+                if critique_result and critique_result.status == "failed":
+                    failed_agent_ids.add(agent_id)
+                continue
+
             result = await executor.execute(agent_spec, context, on_code_event=_on_code_event)
-            results.append(result)
+            results[agent_id] = result
             if result.status == "failed":
                 failed_agent_ids.add(agent_id)
             else:
@@ -149,11 +309,12 @@ async def ws_run_handler(websocket: WebSocket, run_id: str):
                 },
             )
 
-        failed = [result for result in results if result.status == "failed"]
+        final_results = [results[agent["agent_id"]] for agent in ordered_agents if agent["agent_id"] in results]
+        failed = [result for result in final_results if result.status == "failed"]
         final_status = "failed" if failed else "completed"
 
         run.status = final_status
-        run.results = [result.model_dump() for result in results]
+        run.results = [result.model_dump() for result in final_results]
         run.completed_at = datetime.now(timezone.utc)
         db.commit()
 
@@ -162,9 +323,9 @@ async def ws_run_handler(websocket: WebSocket, run_id: str):
             {
                 "status": final_status,
                 "total_agents": len(ordered_agents),
-                "completed": len([result for result in results if result.status == "completed"]),
+                "completed": len([result for result in final_results if result.status == "completed"]),
                 "failed": len(failed),
-                "results": [result.model_dump() for result in results],
+                "results": [result.model_dump() for result in final_results],
             },
         )
 

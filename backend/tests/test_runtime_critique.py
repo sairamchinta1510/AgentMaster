@@ -180,3 +180,67 @@ async def test_run_critique_passes_execution_context_to_llm():
         )
 
     assert any("/tmp/tmpabc" in prompt for prompt in captured_prompts)
+
+
+@pytest.mark.asyncio
+async def test_run_critique_reloads_execution_artifacts_after_fix():
+    """Later critique iterations should see updated execution artifacts after a fix callback."""
+    executor = CritiqueNodeExecutor(api_key="fake", model="gemini")
+    state = {
+        "code": "print('before')",
+        "stdout": '{"log_storage_mechanism": "unknown"}',
+        "stderr": "RuntimeError: before",
+        "returncode": 1,
+    }
+    captured_prompts = []
+    responses = [
+        {
+            "verdict": "NEEDS_FIX",
+            "quality_score": 3.0,
+            "issues": ["Needs fix"],
+            "fix_instructions": "Try again",
+        },
+        {
+            "verdict": "APPROVED",
+            "quality_score": 9.0,
+            "issues": [],
+            "fix_instructions": "",
+        },
+    ]
+    call_count = 0
+
+    async def mock_llm(prompt: str):
+        nonlocal call_count
+        captured_prompts.append(prompt)
+        response = responses[call_count]
+        call_count += 1
+        return response
+
+    async def on_fix(instructions: str, iteration: int):
+        state["code"] = "print('after')"
+        state["stdout"] = '{"log_storage_mechanism": "cloudwatch"}'
+        state["stderr"] = ""
+        state["returncode"] = 0
+
+    with patch.object(executor, "_call_critique_llm", new=mock_llm):
+        result = await executor.run_exec_critique(
+            agent_spec={
+                "agent_id": "a1",
+                "agent_name": "Identify",
+                "description": "Identifies log storage",
+                "input_schema": {"repository_path": {"type": "string"}},
+                "output_schema": {"log_storage_mechanism": {"type": "string"}},
+            },
+            actual_inputs={"REPOSITORY_PATH": "/tmp/tmpabc"},
+            code=lambda: state["code"],
+            stdout=lambda: state["stdout"],
+            stderr=lambda: state["stderr"],
+            returncode=lambda: state["returncode"],
+            min_iterations=2,
+            max_iterations=2,
+            on_fix_needed=on_fix,
+        )
+
+    assert result.verdict == "APPROVED"
+    assert "before" in captured_prompts[0]
+    assert "cloudwatch" in captured_prompts[1]

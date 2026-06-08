@@ -12,7 +12,7 @@ which re-runs the target agent.
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Awaitable, Callable
+from typing import Any, Awaitable, Callable
 
 from openai import AsyncOpenAI
 
@@ -33,6 +33,10 @@ class CritiqueLoopResult:
 
 
 FixCallback = Callable[[str, int], Awaitable[None]]
+
+
+def _resolve_runtime_value(value: Any) -> Any:
+    return value() if callable(value) else value
 
 
 class CritiqueNodeExecutor:
@@ -133,10 +137,10 @@ class CritiqueNodeExecutor:
         self,
         agent_spec: dict,
         actual_inputs: dict,
-        code: str,
-        stdout: str,
-        stderr: str,
-        returncode: int,
+        code,
+        stdout,
+        stderr,
+        returncode,
         min_iterations: int = 3,
         max_iterations: int = 5,
         on_fix_needed: FixCallback | None = None,
@@ -153,10 +157,10 @@ class CritiqueNodeExecutor:
                 input_schema=agent_spec.get("input_schema", {}),
                 output_schema=agent_spec.get("output_schema", {}),
                 actual_inputs=actual_inputs,
-                code=code,
-                stdout=stdout,
-                stderr=stderr,
-                returncode=returncode,
+                code=_resolve_runtime_value(code),
+                stdout=_resolve_runtime_value(stdout),
+                stderr=_resolve_runtime_value(stderr),
+                returncode=_resolve_runtime_value(returncode),
             )
             last_result = await self._call_critique_llm(prompt)
             verdict = last_result.get("verdict", "NEEDS_FIX")
