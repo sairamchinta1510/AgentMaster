@@ -142,6 +142,16 @@ Code rules:
 - Use only pre-installed packages: httpx, requests, boto3, google-cloud-logging,
   google-cloud-monitoring, PyGithub, kubernetes, subprocess, glob, pathlib, json, os, sys, datetime
 
+GIT CLONE RULE (mandatory for any agent that clones a repository):
+  Use tempfile.mkdtemp() for the target directory. After cloning, output the EXACT cloned path:
+    import tempfile, subprocess, json, os
+    repo_url = os.environ.get("GIT_REPO_URL", "")
+    clone_dir = tempfile.mkdtemp()
+    subprocess.run(["git", "clone", "--depth", "1", repo_url, clone_dir], check=False, capture_output=True)
+    print(json.dumps({"repository_path": clone_dir}))
+  NEVER output repository_path as None, empty, or a parent directory.
+  ALWAYS verify the clone succeeded: check os.path.isdir(clone_dir) before printing.
+
 FILESYSTEM SEARCH RULES (mandatory for any agent that identifies files from errors):
 - NEVER guess or infer file paths based on naming conventions or assumptions.
 - ALWAYS search the actual filesystem using os.walk() or pathlib.Path.rglob() to find relevant files.
