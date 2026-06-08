@@ -215,30 +215,22 @@ async def ws_run_handler(websocket: WebSocket, run_id: str):
         context: dict = dict(run.inputs or {})
         start_ms = int(time.time() * 1000)
 
+        async def _emit_code_event(agent_id: str, phase: str, code_preview: str | None):
+            await send(
+                "CODE_STATUS",
+                {
+                    "agent_id": agent_id,
+                    "phase": phase,
+                    "elapsed_ms": int(time.time() * 1000) - start_ms,
+                    "code_preview": code_preview,
+                },
+            )
+
         for agent_spec in ordered_agents:
             agent_id = agent_spec["agent_id"]
 
             if agent_id in failed_agent_ids:
                 continue
-
-            await send(
-                "AGENT_STARTED",
-                {
-                    "agent_id": agent_id,
-                    "agent_name": agent_spec["agent_name"],
-                },
-            )
-
-            async def _on_code_event(agent_id: str, phase: str, code_preview: str | None):
-                await send(
-                    "CODE_STATUS",
-                    {
-                        "agent_id": agent_id,
-                        "phase": phase,
-                        "elapsed_ms": int(time.time() * 1000) - start_ms,
-                        "code_preview": code_preview,
-                    },
-                )
 
             # ── Critique node dispatch ────────────────────────────────────────
             if agent_spec.get("agent_type") == "critique":
@@ -246,7 +238,7 @@ async def ws_run_handler(websocket: WebSocket, run_id: str):
                     rerun_result = await executor.execute(
                         {**spec, "_critique_fix": fix_instr},
                         {**ctx, "_critique_fix_instructions": fix_instr},
-                        on_code_event=_on_code_event,
+                        on_code_event=_emit_code_event,
                     )
                     results[spec["agent_id"]] = rerun_result
                     if rerun_result.status != "failed":
@@ -292,6 +284,17 @@ async def ws_run_handler(websocket: WebSocket, run_id: str):
                     },
                 )
                 continue
+
+            await send(
+                "AGENT_STARTED",
+                {
+                    "agent_id": agent_id,
+                    "agent_name": agent_spec["agent_name"],
+                },
+            )
+
+            async def _on_code_event(agent_id: str, phase: str, code_preview: str | None):
+                await _emit_code_event(agent_id, phase, code_preview)
 
             result = await executor.execute(agent_spec, context, on_code_event=_on_code_event)
             results[agent_id] = result
