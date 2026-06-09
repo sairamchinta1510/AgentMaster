@@ -61,12 +61,19 @@ you must:
 ## CANONICAL SCHEMA FIELD NAMES (MANDATORY — use these exact names, never invent alternatives)
 When designing agents, ALWAYS use these field names in input_schema / output_schema:
 - Git repository URL input  → field name MUST be: "git_repo_url"   (NEVER: repo_url, git_url, repository_url, clone_url)
+- Git access token input    → field name MUST be: "git_token"       (NEVER: github_token, access_token, pat, api_key — type: "credential", required: false)
 - Cloned repo path output   → field name MUST be: "repository_path" (NEVER: local_repo_path, repo_path, clone_path, directory_path, cloned_repo_path, local_path)
 - Cloned repo path input    → field name MUST be: "repository_path" (same — downstream agents inherit this name)
 - Error message input       → field name MUST be: "error_message"   (NEVER: error, err_msg, log_error)
 - File to fix input         → field name MUST be: "offending_file_path"
 These names map directly to environment variables (uppercased) read by the agent code.
 Using any other name will cause the agent to fail at runtime.
+
+## CREDENTIAL RULE
+Any agent that clones a git repository MUST include "git_token" as an OPTIONAL credential field in both
+its input_schema AND in the top-level "required_inputs" list (with required: false).
+This ensures the UI prompts the user for an access token before the run starts, covering private repositories.
+The generated code reads it via os.environ.get("GIT_TOKEN", "") and injects it into the clone URL when present.
 
 ## OUTPUT FORMAT (in-scope objectives only)
 Respond with a JSON object ONLY — no markdown, no prose:

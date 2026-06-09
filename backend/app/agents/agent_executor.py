@@ -142,17 +142,23 @@ Code rules:
 - Use only pre-installed packages: httpx, requests, boto3, google-cloud-logging,
   google-cloud-monitoring, PyGithub, kubernetes, subprocess, glob, pathlib, json, os, sys, datetime
 
-GIT CLONE RULE — use this EXACT code template verbatim (only change repo_url var name if needed):
-  import tempfile, subprocess, json, os, sys
+GIT CLONE RULE — use this EXACT code template verbatim:
+  import tempfile, subprocess, json, os, sys, re
   repo_url = os.environ.get("GIT_REPO_URL", "")
   if not repo_url:
-      print(json.dumps({"repository_path": "", "error": "GIT_REPO_URL not set"}))
-      sys.exit(0)
+      print(json.dumps({"repository_path": None, "error": "GIT_REPO_URL not set"}))
+      sys.exit(1)
+  # Inject optional access token into HTTPS URLs (canonical field: GIT_TOKEN)
+  git_token = os.environ.get("GIT_TOKEN", "")
+  if git_token and repo_url.startswith("https://"):
+      repo_url = re.sub(r"^https://", f"https://{git_token}@", repo_url)
   clone_dir = tempfile.mkdtemp()
   result = subprocess.run(["git", "clone", "--depth", "1", repo_url, clone_dir],
                           capture_output=True, text=True, timeout=120)
   if result.returncode != 0:
-      print(f"Clone stderr: {result.stderr[:500]}", file=sys.stderr)
+      error_msg = result.stderr.strip() or result.stdout.strip() or f"git clone exited with code {result.returncode}"
+      print(json.dumps({"repository_path": None, "error": error_msg}))
+      sys.exit(1)
   print(json.dumps({"repository_path": clone_dir}))
 
 FILE COUNTING RULE — use this EXACT code template verbatim:
@@ -599,19 +605,23 @@ class AgentExecutorAgent:
                 # Git-clone agent — always use verbatim template
                 logger.info("[%s] Injecting deterministic GIT CLONE template", agent_id)
                 code = (
-                    "import tempfile, subprocess, json, os, sys\n"
+                    "import tempfile, subprocess, json, os, sys, re\n"
                     "repo_url = os.environ.get('GIT_REPO_URL', '')\n"
                     "if not repo_url:\n"
-                    "    print(json.dumps({'repository_path': '', "
-                    "'error': 'GIT_REPO_URL not set'}))\n"
-                    "else:\n"
-                    "    clone_dir = tempfile.mkdtemp()\n"
-                    "    result = subprocess.run(\n"
-                    "        ['git', 'clone', '--depth', '1', repo_url, clone_dir],\n"
-                    "        capture_output=True, text=True, timeout=120)\n"
-                    "    if result.returncode != 0:\n"
-                    "        print('Clone stderr: ' + result.stderr[:500], file=sys.stderr)\n"
-                    "    print(json.dumps({'repository_path': clone_dir}))\n"
+                    "    print(json.dumps({'repository_path': None, 'error': 'GIT_REPO_URL not set'}))\n"
+                    "    sys.exit(1)\n"
+                    "git_token = os.environ.get('GIT_TOKEN', '')\n"
+                    "if git_token and repo_url.startswith('https://'):\n"
+                    "    repo_url = re.sub(r'^https://', f'https://{git_token}@', repo_url)\n"
+                    "clone_dir = tempfile.mkdtemp()\n"
+                    "result = subprocess.run(\n"
+                    "    ['git', 'clone', '--depth', '1', repo_url, clone_dir],\n"
+                    "    capture_output=True, text=True, timeout=120)\n"
+                    "if result.returncode != 0:\n"
+                    "    error_msg = result.stderr.strip() or result.stdout.strip() or f'git clone exited with code {result.returncode}'\n"
+                    "    print(json.dumps({'repository_path': None, 'error': error_msg}))\n"
+                    "    sys.exit(1)\n"
+                    "print(json.dumps({'repository_path': clone_dir}))\n"
                 )
 
             # ── Deterministic env-var sanitiser (runs before every LLM attempt) ─
