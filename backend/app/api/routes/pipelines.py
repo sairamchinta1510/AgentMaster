@@ -99,6 +99,20 @@ def update_credentials(pipeline_id: str, req: UpdateCredentialsRequest, db: Sess
     return _orm_to_pipeline(row)
 
 
+@router.post("/{pipeline_id}/clear-blueprint", response_model=Pipeline)
+def clear_blueprint(pipeline_id: str, db: Session = Depends(get_db)):
+    """Clear the cached blueprint to force regeneration on next design."""
+    row = db.query(PipelineORM).filter(PipelineORM.id == pipeline_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Pipeline not found")
+    row.blueprint = {}
+    row.input_schema = []
+    db.commit()
+    db.refresh(row)
+    backup_to_gcs()
+    return _orm_to_pipeline(row)
+
+
 @router.delete("/{pipeline_id}", status_code=204)
 def delete_pipeline(pipeline_id: str, db: Session = Depends(get_db)):
     row = db.query(PipelineORM).filter(PipelineORM.id == pipeline_id).first()
