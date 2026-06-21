@@ -8,6 +8,15 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Constants
+MAX_RETRIES = 3
+MIN_CONFIDENCE_CONSISTENCY = 70
+MIN_CONFIDENCE_COMBINED = 80
+CONFIDENCE_APPROVED_ALL_PASS = 95
+CONFIDENCE_APPROVED_TWO_PASS = 85
+CONFIDENCE_NEEDS_REVIEW = 50
+CONFIDENCE_REJECTED = 20
+
 
 class CritiqueAgent:
     """
@@ -33,7 +42,9 @@ class CritiqueAgent:
 
     def run_critique(self) -> Dict[str, Any]:
         """
-        Run minimum 3 critique rounds.
+        Run minimum 3 critique rounds with retry logic.
+
+        Retries up to MAX_RETRIES times if any round fails.
 
         Returns:
             dict with verdict, round_results, overall_confidence
@@ -54,7 +65,57 @@ class CritiqueAgent:
                 "overall_confidence": 0
             }
 
-        # Run 3 rounds
+        # Retry loop - retry up to MAX_RETRIES times if rounds fail
+        for attempt in range(MAX_RETRIES):
+            round_results = self._run_critique_rounds()
+
+            # Determine verdict
+            passed_count = sum(1 for r in round_results if r["passed"])
+
+            if passed_count == 3:
+                verdict = "approved"
+                confidence = CONFIDENCE_APPROVED_ALL_PASS
+                break
+            elif passed_count >= 2:
+                # 2/3 passed - run Round 4 with combined context
+                round4 = self._round4_combined()
+                round_results.append(round4)
+                self._save_critique(4, "combined_review", "passed" if round4["passed"] else "failed", round4["reasoning"])
+
+                if round4["passed"]:
+                    verdict = "approved"
+                    confidence = CONFIDENCE_APPROVED_TWO_PASS
+                    break
+                else:
+                    verdict = "needs_human_review"
+                    confidence = CONFIDENCE_NEEDS_REVIEW
+                    # Retry if 2/3 passed but combined review failed
+                    if attempt < MAX_RETRIES - 1:
+                        logger.info(f"Agent {self.agent_id} failed combined review, retrying (attempt {attempt + 1}/{MAX_RETRIES})")
+                        continue
+                    break
+            else:
+                # Fewer than 2/3 passed - retry
+                verdict = "rejected"
+                confidence = CONFIDENCE_REJECTED
+                if attempt < MAX_RETRIES - 1:
+                    logger.info(f"Agent {self.agent_id} failed {passed_count}/3 rounds, retrying (attempt {attempt + 1}/{MAX_RETRIES})")
+                    continue
+                break
+
+        return {
+            "verdict": verdict,
+            "round_results": round_results,
+            "overall_confidence": confidence
+        }
+
+    def _run_critique_rounds(self) -> List[Dict[str, Any]]:
+        """
+        Execute the 3 main critique rounds.
+
+        Returns:
+            list of round results
+        """
         round_results = []
 
         # Round 1: Factual Verification
@@ -72,33 +133,7 @@ class CritiqueAgent:
         round_results.append(round3)
         self._save_critique(3, "consistency_validation", "passed" if round3["passed"] else "failed", round3["reasoning"])
 
-        # Determine verdict
-        passed_count = sum(1 for r in round_results if r["passed"])
-
-        if passed_count == 3:
-            verdict = "approved"
-            confidence = 95
-        elif passed_count >= 2:
-            # 2/3 passed - run Round 4 with combined context
-            round4 = self._round4_combined()
-            round_results.append(round4)
-            self._save_critique(4, "combined_review", "passed" if round4["passed"] else "failed", round4["reasoning"])
-
-            if round4["passed"]:
-                verdict = "approved"
-                confidence = 85
-            else:
-                verdict = "needs_human_review"
-                confidence = 50
-        else:
-            verdict = "rejected"
-            confidence = 20
-
-        return {
-            "verdict": verdict,
-            "round_results": round_results,
-            "overall_confidence": confidence
-        }
+        return round_results
 
     def _round_factual_verification(self) -> Dict[str, Any]:
         """Round 1: Check all claims against citations."""
@@ -169,10 +204,10 @@ class CritiqueAgent:
 
     def _round_consistency_validation(self) -> Dict[str, Any]:
         """Round 3: Check consistency with task requirements."""
-        # Simple heuristic: if confidence >= 70, likely consistent
+        # Simple heuristic: if confidence >= MIN_CONFIDENCE_CONSISTENCY, likely consistent
         confidence = self.agent_output.get("confidence", 0)
 
-        if confidence < 70:
+        if confidence < MIN_CONFIDENCE_CONSISTENCY:
             return {
                 "round": 3,
                 "type": "consistency_validation",
@@ -192,13 +227,13 @@ class CritiqueAgent:
     def _round4_combined(self) -> Dict[str, Any]:
         """Round 4: Combined review when rounds disagree."""
         # If we got here, 2/3 rounds passed
-        # Simple heuristic: approve if confidence >= 80
+        # Simple heuristic: approve if confidence >= MIN_CONFIDENCE_COMBINED
         confidence = self.agent_output.get("confidence", 0)
 
         return {
             "round": 4,
             "type": "combined_review",
-            "passed": confidence >= 80,
+            "passed": confidence >= MIN_CONFIDENCE_COMBINED,
             "reasoning": f"Combined review based on confidence: {confidence}%",
             "unsupported_claims": []
         }
