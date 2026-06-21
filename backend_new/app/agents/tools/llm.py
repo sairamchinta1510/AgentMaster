@@ -29,8 +29,10 @@ def llm_call_tool(prompt: str, system: Optional[str] = None) -> Dict:
         }
 
     try:
+        # Use the correct model name for Gemini API
+        # Available: gemini-pro, gemini-1.5-pro, gemini-2.0-flash-exp
         model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash-latest",  # Use latest version
+            model_name="gemini-pro",  # Most stable model
             system_instruction=system if system else None
         )
 
