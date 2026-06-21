@@ -6,7 +6,7 @@
 
 ```bash
 cd backend_new
-pip install -r requirements.txt
+pip3 install -r requirements.txt  # or: python3 -m pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
