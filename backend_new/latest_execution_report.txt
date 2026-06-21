@@ -1,0 +1,81 @@
+====================================================================================================
+AGENTMASTER EXECUTION REPORT
+====================================================================================================
+
+📋 EXECUTION: 03834948-e62d-4f23-92e5-7986494fbf44
+   Objective: Create a comprehensive 5-page training document on Python Best Practices for junior developers. Include code examples, common mistakes, and best practices for error handling, testing, and code organization.
+   Domain: Content Generation
+   Status: completed
+   Created: 2026-06-21 09:21:27
+   Completed: 2026-06-21 09:21:27.272353
+   Root Agent: 4214dd0c-9ce9-475c-8eab-7dfcdb2b1092
+
+====================================================================================================
+AGENT HIERARCHY
+====================================================================================================
+
+🔷 [SUB_AGENT] ✅ completed
+   ID: 4214dd0c...
+   Task: [Content Generation] Create a comprehensive 5-page training document on Python B...
+   Depth: 0
+   📥 INPUT:
+      objective: Create a comprehensive 5-page training document on Python Be...
+      domain: Content Generation
+   📤 OUTPUT:
+      decomposition:
+         complexity_score: 4
+         reasoning: Task complexity: 4/9 (steps=2, domains=1, uncertainty=1)
+         children_count: 1
+   📚 CITATIONS: 1 found
+      1. [decomposition] sub_agent
+   🔍 CRITIQUE RESULTS:
+      ✅ Round 1 (factual_verification): passed
+         → All citations properly structured
+      ✅ Round 2 (completeness_check): passed
+         → Agent completed with output data
+      ✅ Round 3 (consistency_validation): passed
+         → Confidence score acceptable: 90%
+   ⏱️  Duration: 0.013s
+
+  ⚡ [ATOMIC_AGENT] ⚠️ human_review
+     ID: c2b0ea80...
+     Task: [Content Generation] Create a comprehensive 5-page training document on Python B...
+     Depth: 1
+     Parent: 4214dd0c...
+     📥 INPUT:
+        objective: Create a comprehensive 5-page training document on Python Be...
+        domain: Content Generation
+     🔍 CRITIQUE RESULTS:
+        ✅ Round 1 (factual_verification): passed
+           → All citations properly structured
+        ✅ Round 2 (completeness_check): passed
+           → Agent completed with output data
+        ❌ Round 3 (consistency_validation): failed
+           → Low confidence score: 50%
+        ❌ Round 4 (combined_review): failed
+           → Combined review based on confidence: 50%
+
+====================================================================================================
+EXECUTION GRAPH (ASCII)
+====================================================================================================
+
+🌳 ROOT: 🔷 [sub_agent] ✅
+   Task: [Content Generation] Create a comprehensive 5-page training ...
+   ID: 4214dd0c...
+
+├─ ⚡ [atomic_agent] ⚠️
+│   Task: [Content Generation] Create a comprehensive 5-page training ...
+│   ID: c2b0ea80...
+│
+
+====================================================================================================
+SUMMARY
+====================================================================================================
+   Total Agents: 2
+   Sub-Agents: 1
+   Atomic Agents: 1
+   Completed: 1
+   Human Review: 1
+   Failed: 0
+   Total Edges: 0
+====================================================================================================
