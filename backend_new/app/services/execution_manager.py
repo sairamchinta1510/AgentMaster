@@ -33,35 +33,8 @@ class ExecutionManager:
         """Execute all agents for this execution."""
         logger.info(f"Starting execution: {self.execution_id}")
 
-        # Load agents and edges
-        agents = self.db_session.query(Agent).filter_by(execution_id=self.execution_id).all()
-        edges = self.db_session.query(Edge).filter_by(execution_id=self.execution_id).all()
-
-        if not agents:
-            logger.warning(f"No agents found for execution {self.execution_id}")
-            return
-
-        # Build graph and get execution order
-        graph = GraphBuilder()
-        for agent in agents:
-            graph.add_agent(agent)
-        for edge in edges:
-            graph.add_edge(edge)
-
-        # Validate no cycles
-        if not graph.validate_no_cycles():
-            logger.error(f"Cycle detected in execution {self.execution_id}")
-            await self._broadcast_event("execution_failed", {"reason": "Cycle detected in agent graph"})
-            return
-
-        # Get topological order
-        execution_order = graph.topological_sort()
-        logger.info(f"Execution order: {execution_order}")
-
-        # Execute agents in order
-        for agent_id in execution_order:
-            agent = graph.agents[agent_id]
-            await self._execute_agent(agent)
+        # Execute recursively starting from root agents
+        await self._execute_all_pending_agents()
 
         # Mark execution complete
         execution = self.db_session.query(Execution).filter_by(id=self.execution_id).first()
@@ -71,6 +44,55 @@ class ExecutionManager:
 
         await self._broadcast_event("execution_completed", {})
         logger.info(f"Execution {self.execution_id} completed")
+
+    async def _execute_all_pending_agents(self) -> None:
+        """
+        Execute all pending agents recursively.
+        After Sub-Agents decompose and create children, this re-runs to pick them up.
+        """
+        while True:
+            # Reload agents and edges from database (includes newly created children)
+            agents = self.db_session.query(Agent).filter_by(execution_id=self.execution_id).all()
+            edges = self.db_session.query(Edge).filter_by(execution_id=self.execution_id).all()
+
+            if not agents:
+                logger.warning(f"No agents found for execution {self.execution_id}")
+                return
+
+            # Build graph and get execution order
+            graph = GraphBuilder()
+            for agent in agents:
+                graph.add_agent(agent)
+            for edge in edges:
+                graph.add_edge(edge)
+
+            # Validate no cycles
+            if not graph.validate_no_cycles():
+                logger.error(f"Cycle detected in execution {self.execution_id}")
+                await self._broadcast_event("execution_failed", {"reason": "Cycle detected in agent graph"})
+                return
+
+            # Get topological order
+            execution_order = graph.topological_sort()
+            logger.info(f"Execution order: {execution_order}")
+
+            # Find next pending agent to execute
+            next_agent = None
+            for agent_id in execution_order:
+                agent = graph.agents[agent_id]
+                if agent.status == "pending":
+                    next_agent = agent
+                    break
+
+            # If no pending agents, we're done
+            if not next_agent:
+                logger.info("No more pending agents")
+                break
+
+            # Execute the next pending agent
+            await self._execute_agent(next_agent)
+
+            # Loop continues - will reload graph and find next pending agent
 
     async def _execute_agent(self, agent: Agent) -> None:
         """Execute a single agent."""
