@@ -24,6 +24,17 @@ This example demonstrates AgentMaster's recursive multi-agent orchestration with
 
 ```bash
 cd backend_new
+
+# Create virtual environment (first time only)
+python3 -m venv venv
+
+# Activate virtual environment
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Start server
 uvicorn app.main:app --reload
 ```
 
@@ -33,6 +44,11 @@ Wait for: `Application startup complete.`
 
 ```bash
 cd backend_new
+
+# Activate virtual environment
+source venv/bin/activate
+
+# Run example
 python example_use_case.py
 ```
 

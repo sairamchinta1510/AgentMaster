@@ -6,7 +6,17 @@
 
 ```bash
 cd backend_new
-pip3 install -r requirements.txt  # or: python3 -m pip install -r requirements.txt
+
+# Create virtual environment (first time only)
+python3 -m venv venv
+
+# Activate virtual environment
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Start server
 uvicorn app.main:app --reload
 ```
 
