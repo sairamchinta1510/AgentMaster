@@ -117,8 +117,8 @@ class SubAgent:
         """Decompose medium task into Atomic Agents + 1-2 Sub-Agents."""
         children = []
 
-        # At max depth, only create Atomic Agents
-        if self.depth >= settings.max_recursion_depth:
+        # At depth N-1, only create Atomic Agents (children will be at depth N, the max)
+        if self.depth >= settings.max_recursion_depth - 1:
             return self._decompose_simple()
 
         # Child 1: Sub-Agent for complex part
@@ -147,8 +147,8 @@ class SubAgent:
         """Decompose complex task into 2-N Sub-Agents."""
         children = []
 
-        # At max depth, force Atomic Agents
-        if self.depth >= settings.max_recursion_depth:
+        # At depth N-1, force Atomic Agents (children will be at depth N, the max)
+        if self.depth >= settings.max_recursion_depth - 1:
             return self._decompose_simple()
 
         # Create 2-3 Sub-Agents for different aspects
