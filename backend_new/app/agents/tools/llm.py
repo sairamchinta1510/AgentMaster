@@ -30,7 +30,7 @@ def llm_call_tool(prompt: str, system: Optional[str] = None) -> Dict:
 
     try:
         model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash",
+            model_name="gemini-1.5-flash-latest",  # Use latest version
             system_instruction=system if system else None
         )
 
