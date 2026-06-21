@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict
 class CitationSchema(BaseModel):
     source_type: str  # file | url | command
     source: str
-    excerpt: Optional[str]
+    excerpt: Optional[str] = None
 
 
 class AgentResponse(BaseModel):
