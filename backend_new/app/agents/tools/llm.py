@@ -3,8 +3,9 @@ import google.generativeai as genai
 from app.config import settings
 from app.utils.metrics import count_tokens
 
-# Configure Gemini
-genai.configure(api_key=settings.gemini_api_key)
+# Configure Gemini (only if API key is provided)
+if settings.gemini_api_key and settings.gemini_api_key != "test_api_key":
+    genai.configure(api_key=settings.gemini_api_key)
 
 
 def llm_call_tool(prompt: str, system: Optional[str] = None) -> Dict:
@@ -18,6 +19,15 @@ def llm_call_tool(prompt: str, system: Optional[str] = None) -> Dict:
     Returns:
         dict with status, response, tokens_used, error
     """
+    # Check if API key is configured
+    if not settings.gemini_api_key or settings.gemini_api_key == "test_api_key":
+        return {
+            "status": "failed",
+            "response": "",
+            "tokens_used": 0,
+            "error": "GEMINI_API_KEY not configured. Set GEMINI_API_KEY in .env file. Get your key from: https://makersuite.google.com/app/apikey"
+        }
+
     try:
         model = genai.GenerativeModel(
             model_name="gemini-1.5-flash",
