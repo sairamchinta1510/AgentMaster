@@ -80,13 +80,19 @@ async def monitor_execution(execution_id):
                 data = event.get("data", {})
 
                 if event_type == "execution_started":
-                    print(f"{Colors.GREEN}▶ Execution started{Colors.RESET}")
+                    print(f"{Colors.GREEN}▶ Execution started - agents are being created and executed...{Colors.RESET}")
+
+                elif event_type == "agent_created":
+                    agent_type = data.get("agent_type", "unknown")
+                    agent_name = data.get("agent_name", "")[:50]
+                    icon = "🔷" if agent_type == "sub_agent" else "⚡"
+                    print(f"{Colors.YELLOW}  + Planned: {icon} {agent_type} - {agent_name}...{Colors.RESET}")
 
                 elif event_type == "agent_started":
                     agent_type = data.get("agent_type", "unknown")
                     agent_name = data.get("agent_name", "")[:60]
                     icon = "🔷" if agent_type == "sub_agent" else "⚡"
-                    print(f"{Colors.BLUE}{icon} Starting: {agent_name}...{Colors.RESET}")
+                    print(f"{Colors.BLUE}{icon} Executing: {agent_name}...{Colors.RESET}")
 
                 elif event_type == "agent_completed":
                     agent_name = data.get("agent_name", "")[:60]
@@ -97,13 +103,17 @@ async def monitor_execution(execution_id):
                     reason = data.get("reason", "Unknown")
                     print(f"{Colors.RED}✗ Failed: {agent_name} - {reason}{Colors.RESET}")
 
+                elif event_type == "critique_round_started":
+                    round_num = data.get("round", "?")
+                    print(f"  {Colors.BLUE}  → Validating output (Round {round_num})...{Colors.RESET}")
+
                 elif event_type == "critique_completed":
                     verdict = data.get("verdict")
                     confidence = data.get("confidence", 0)
                     if verdict == "approved":
-                        print(f"  {Colors.GREEN}✓ Critique: {verdict} ({confidence}% confidence){Colors.RESET}")
+                        print(f"  {Colors.GREEN}✓ Validation: {verdict} ({confidence}% confidence){Colors.RESET}")
                     else:
-                        print(f"  {Colors.YELLOW}⚠ Critique: {verdict} ({confidence}% confidence){Colors.RESET}")
+                        print(f"  {Colors.YELLOW}⚠ Validation: {verdict} ({confidence}% confidence){Colors.RESET}")
 
                 elif event_type == "execution_completed":
                     print(f"\n{Colors.GREEN}{Colors.BOLD}✓ EXECUTION COMPLETED!{Colors.RESET}\n")
