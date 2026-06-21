@@ -70,6 +70,18 @@ async def monitor_execution(execution_id):
 
     print(f"\n{Colors.BLUE}Connecting to execution monitor...{Colors.RESET}")
 
+    # Stats tracking
+    stats = {
+        "agents_planned": 0,
+        "sub_agents": 0,
+        "atomic_agents": 0,
+        "agents_completed": 0,
+        "agents_failed": 0,
+        "critiques_approved": 0,
+        "critiques_rejected": 0,
+        "files_created": []
+    }
+
     try:
         async with websockets.connect(url, ping_timeout=120) as ws:
             print(f"{Colors.GREEN}✓ Connected{Colors.RESET}\n")
@@ -88,6 +100,13 @@ async def monitor_execution(execution_id):
                     icon = "🔷" if agent_type == "sub_agent" else "⚡"
                     print(f"{Colors.YELLOW}  + Planned: {icon} {agent_type} - {agent_name}...{Colors.RESET}")
 
+                    # Track stats
+                    stats["agents_planned"] += 1
+                    if agent_type == "sub_agent":
+                        stats["sub_agents"] += 1
+                    else:
+                        stats["atomic_agents"] += 1
+
                 elif event_type == "agent_started":
                     agent_type = data.get("agent_type", "unknown")
                     agent_name = data.get("agent_name", "")[:60]
@@ -97,11 +116,13 @@ async def monitor_execution(execution_id):
                 elif event_type == "agent_completed":
                     agent_name = data.get("agent_name", "")[:60]
                     print(f"{Colors.GREEN}✓ Completed: {agent_name}{Colors.RESET}")
+                    stats["agents_completed"] += 1
 
                 elif event_type == "agent_failed":
                     agent_name = data.get("agent_name", "")[:60]
                     reason = data.get("reason", "Unknown")
                     print(f"{Colors.RED}✗ Failed: {agent_name} - {reason}{Colors.RESET}")
+                    stats["agents_failed"] += 1
 
                 elif event_type == "critique_round_started":
                     round_num = data.get("round", "?")
@@ -112,17 +133,19 @@ async def monitor_execution(execution_id):
                     confidence = data.get("confidence", 0)
                     if verdict == "approved":
                         print(f"  {Colors.GREEN}✓ Validation: {verdict} ({confidence}% confidence){Colors.RESET}")
+                        stats["critiques_approved"] += 1
                     else:
                         print(f"  {Colors.YELLOW}⚠ Validation: {verdict} ({confidence}% confidence){Colors.RESET}")
+                        stats["critiques_rejected"] += 1
 
                 elif event_type == "execution_completed":
                     print(f"\n{Colors.GREEN}{Colors.BOLD}✓ EXECUTION COMPLETED!{Colors.RESET}\n")
-                    break
+                    return stats  # Return stats for final summary
 
                 elif event_type == "execution_failed":
                     reason = data.get("reason", "Unknown")
                     print(f"\n{Colors.RED}Execution failed: {reason}{Colors.RESET}\n")
-                    break
+                    return stats
 
                 elif event_type == "human_review_needed":
                     agent_name = data.get("agent_name", "")[:60]
@@ -130,6 +153,8 @@ async def monitor_execution(execution_id):
 
     except Exception as e:
         print(f"{Colors.RED}Monitor error: {e}{Colors.RESET}")
+
+    return stats  # Return stats even if connection closes
 
 async def main():
     # Get user input
@@ -162,8 +187,8 @@ async def main():
         print(f"{Colors.RED}Failed to submit task: {e}{Colors.RESET}")
         return
 
-    # Monitor execution
-    await monitor_execution(execution_id)
+    # Monitor execution and get stats
+    stats = await monitor_execution(execution_id)
 
     # Get final results
     try:
@@ -171,14 +196,74 @@ async def main():
         if response.status_code == 200:
             result = response.json()
 
-            print_header("Results")
-            print(f"Status: {result['status']}")
-            if result.get('completed_at'):
-                print(f"Completed: {result['completed_at']}")
+            print_header("Execution Summary")
 
-            # Check for created files
-            print(f"\n{Colors.BLUE}Check the backend_new directory for any created files.{Colors.RESET}")
-            print(f"Files are typically named with timestamps like: *_YYYYMMDD_HHMMSS.md")
+            # Execution details
+            print(f"{Colors.BOLD}Execution ID:{Colors.RESET} {execution_id}")
+            print(f"{Colors.BOLD}Status:{Colors.RESET} {result['status']}")
+
+            # Timing
+            if result.get('created_at') and result.get('completed_at'):
+                from datetime import datetime
+                start = datetime.fromisoformat(result['created_at'].replace('Z', '+00:00'))
+                end = datetime.fromisoformat(result['completed_at'].replace('Z', '+00:00'))
+                duration = (end - start).total_seconds()
+                print(f"{Colors.BOLD}Duration:{Colors.RESET} {duration:.1f} seconds")
+
+            # Agent statistics
+            print(f"\n{Colors.BOLD}Agent Statistics:{Colors.RESET}")
+            print(f"  Total Agents Planned: {stats['agents_planned']}")
+            print(f"  └─ Sub-Agents (decomposition): {stats['sub_agents']}")
+            print(f"  └─ Atomic Agents (execution): {stats['atomic_agents']}")
+            print(f"  Completed: {stats['agents_completed']}")
+            print(f"  Failed: {stats['agents_failed']}")
+
+            # Critique statistics
+            print(f"\n{Colors.BOLD}Validation Results:{Colors.RESET}")
+            print(f"  ✅ Approved: {stats['critiques_approved']}")
+            print(f"  ❌ Rejected: {stats['critiques_rejected']}")
+
+            # Find created files
+            import os
+            import glob
+            from datetime import datetime, timedelta
+
+            print(f"\n{Colors.BOLD}Created Files:{Colors.RESET}")
+
+            # Look for markdown files created in the last 5 minutes
+            now = datetime.now()
+            five_min_ago = now - timedelta(minutes=5)
+
+            md_files = glob.glob("*.md")
+            recent_files = []
+
+            for f in md_files:
+                if os.path.isfile(f):
+                    mtime = datetime.fromtimestamp(os.path.getmtime(f))
+                    if mtime > five_min_ago:
+                        size_kb = os.path.getsize(f) / 1024
+                        recent_files.append((f, size_kb, mtime))
+
+            if recent_files:
+                # Sort by modification time (newest first)
+                recent_files.sort(key=lambda x: x[2], reverse=True)
+
+                for filename, size_kb, mtime in recent_files:
+                    abs_path = os.path.abspath(filename)
+                    print(f"\n  {Colors.GREEN}📄 {filename}{Colors.RESET}")
+                    print(f"     Size: {size_kb:.1f} KB")
+                    print(f"     Path: {abs_path}")
+                    print(f"     Link: file://{abs_path}")
+            else:
+                print(f"  {Colors.YELLOW}No new files detected in the last 5 minutes{Colors.RESET}")
+                print(f"  Check directory: {os.getcwd()}")
+
+            # API Links
+            print(f"\n{Colors.BOLD}API Links:{Colors.RESET}")
+            print(f"  Execution Details: {BASE_URL}/api/executions/{execution_id}")
+            print(f"  API Documentation: {BASE_URL}/docs")
+            print(f"  Studio (Design Mode): {BASE_URL}/ws/studio/{execution_id}")
+            print(f"  Control Room (Run Mode): {BASE_URL}/ws/control-room/{execution_id}")
 
     except Exception as e:
         print(f"{Colors.YELLOW}Could not retrieve final results: {e}{Colors.RESET}")
