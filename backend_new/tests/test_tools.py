@@ -114,6 +114,32 @@ def test_file_read_bytes_read():
         assert result["bytes_read"] == len(content.encode('utf-8'))
 
 
+def test_file_write_root_level_file():
+    """Test writing a file with no directory component (root-level)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Change to temp directory and write to root level
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(tmpdir)
+            file_path = "test_root.txt"
+            content = "root level file content"
+
+            # Write to root-level file (no directory path)
+            result = file_write_tool(file_path, content)
+            assert result["status"] == "completed"
+            assert result["bytes_written"] > 0
+
+            # Verify the file was created
+            assert os.path.exists(file_path)
+
+            # Verify content
+            read_result = file_read_tool(file_path)
+            assert read_result["status"] == "completed"
+            assert read_result["content"] == content
+        finally:
+            os.chdir(original_cwd)
+
+
 # =============================================================================
 # LLM Tool Tests
 # =============================================================================

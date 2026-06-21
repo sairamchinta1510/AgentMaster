@@ -48,7 +48,9 @@ def file_write_tool(file_path: str, content: str) -> Dict:
     """
     try:
         # Create parent directory if it doesn't exist
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        parent_dir = os.path.dirname(file_path)
+        if parent_dir:
+            os.makedirs(parent_dir, exist_ok=True)
 
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(content)
