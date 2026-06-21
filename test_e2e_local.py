@@ -11,7 +11,10 @@ from datetime import datetime
 
 BASE_WS = "wss://agentmaster-ouabviezcq-ew.a.run.app"
 BASE_HTTP = "https://agentmaster-ouabviezcq-ew.a.run.app"
-PIPELINE_ID = "0e1d5e03-c43d-44de-80f1-81e1387f408e"
+
+# Read pipeline ID from file
+with open('/tmp/new_pipeline_id.txt', 'r') as f:
+    PIPELINE_ID = f.read().strip()
 
 # Track what we see
 design_complete = False
@@ -51,6 +54,13 @@ async def test_design_phase():
 
                     elif event_type == "BLUEPRINT_READY":
                         blueprint = data.get("blueprint", {})
+                        
+                        # Check if out of scope
+                        if blueprint.get("out_of_scope"):
+                            print(f"\n✗ REJECTED AS OUT OF SCOPE!")
+                            print(f"   Reason: {blueprint.get('reason', 'Unknown')}")
+                            return False
+                        
                         agents = blueprint.get("agents", [])
                         print(f"\n✓ Blueprint ready with {len(agents)} agents:")
                         for i, agent in enumerate(agents, 1):
@@ -63,14 +73,6 @@ async def test_design_phase():
                     elif event_type == "AGENT_STARTED":
                         agent_name = data.get("agent_name", "")
                         print(f"  [STARTED] {agent_name}")
-
-                    elif event_type == "AGENT_PRODUCED":
-                        print(f"  [PRODUCED] Agent specification complete")
-
-                    elif event_type == "CRITIQUE_COMPLETE":
-                        verdict = data.get("verdict", "")
-                        iterations = data.get("iterations", "")
-                        print(f"  [CRITIQUE] {verdict} after {iterations} iteration(s)")
 
                     elif event_type == "DESIGN_COMPLETE":
                         agent_count = data.get("agent_count", 0)
@@ -238,6 +240,12 @@ def verify_html_output():
             print(f"  - Not enough Claude mentions (found {claude_mentions}, expected >= 5)")
         if exercise_count < 8:
             print(f"  - Not enough exercises (found {exercise_count}, expected >= 8)")
+
+        # Save for debugging anyway
+        debug_file = f"debug_output_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
+        with open(debug_file, 'w', encoding='utf-8') as f:
+            f.write(html_output if html_output else "No output")
+        print(f"  Saved debug output to: {debug_file}")
 
         return False
 

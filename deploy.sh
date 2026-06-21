@@ -7,14 +7,18 @@ set -e
 REGION="${1:-europe-west1}"
 SERVICE_NAME="agentmaster"
 
-# Get API key from backend/.env
+# Get API key from backend/.env (optional for updates)
 if [ -f "backend/.env" ]; then
     GEMINI_API_KEY=$(grep "^GEMINI_API_KEY=" backend/.env | cut -d'=' -f2)
 fi
 
+# For updates to existing deployments, API key is optional (keeps existing value)
 if [ -z "$GEMINI_API_KEY" ]; then
-    echo "Error: GEMINI_API_KEY not found in backend/.env"
-    exit 1
+    echo "⚠️  Warning: GEMINI_API_KEY not found in backend/.env"
+    echo "Deployment will keep existing environment variables"
+    USE_EXISTING_ENV=true
+else
+    USE_EXISTING_ENV=false
 fi
 
 PROJECT=$(gcloud config get-value project 2>/dev/null)
@@ -42,17 +46,32 @@ gcloud builds submit . \
 
 # 3. Deploy to Cloud Run
 echo "[3/4] Deploying to Cloud Run..."
-gcloud run deploy "$SERVICE_NAME" \
-    --image "$IMAGE" \
-    --platform managed \
-    --region "$REGION" \
-    --allow-unauthenticated \
-    --port 8080 \
-    --set-env-vars "GEMINI_API_KEY=$GEMINI_API_KEY,DATABASE_URL=sqlite:////tmp/data/agentmaster.db,CORS_ORIGINS_RAW=*,GCS_BUCKET=agentmaster-db-$PROJECT,GCS_DB_KEY=agentmaster.db" \
-    --memory 2Gi \
-    --cpu 2 \
-    --timeout 900 \
-    --project "$PROJECT"
+if [ "$USE_EXISTING_ENV" = true ]; then
+    # Update deployment without changing env vars (keeps existing)
+    gcloud run deploy "$SERVICE_NAME" \
+        --image "$IMAGE" \
+        --platform managed \
+        --region "$REGION" \
+        --allow-unauthenticated \
+        --port 8080 \
+        --memory 2Gi \
+        --cpu 2 \
+        --timeout 900 \
+        --project "$PROJECT"
+else
+    # Full deployment with new env vars
+    gcloud run deploy "$SERVICE_NAME" \
+        --image "$IMAGE" \
+        --platform managed \
+        --region "$REGION" \
+        --allow-unauthenticated \
+        --port 8080 \
+        --set-env-vars "GEMINI_API_KEY=$GEMINI_API_KEY,DATABASE_URL=sqlite:////tmp/data/agentmaster.db,CORS_ORIGINS_RAW=*,GCS_BUCKET=agentmaster-db-$PROJECT,GCS_DB_KEY=agentmaster.db" \
+        --memory 2Gi \
+        --cpu 2 \
+        --timeout 900 \
+        --project "$PROJECT"
+fi
 
 # 4. Get the URL
 echo "[4/4] Getting service URL..."

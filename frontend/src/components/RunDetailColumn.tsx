@@ -63,7 +63,18 @@ function buildReport(allResults: Record<string, AgentResult>): string {
 
 function isPath(s: string) { return /^(\/|[A-Z]:\\|\.\/|~\/)/.test(s) || s.includes("/log") || s.includes("\\log"); }
 function isUrl(s: string) { return /^https?:\/\//.test(s); }
+function isHtml(s: string) { return /^\s*<!doctype html|^\s*<html/i.test(s.trim()); }
 function humanize(key: string) { return key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()); }
+
+function downloadHtml(content: string, filename: string) {
+  const blob = new Blob([content], { type: "text/html" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 function RichValue({ label, value }: { label: string; value: unknown }) {
   const [expanded, setExpanded] = useState(true);
@@ -133,6 +144,45 @@ function RichValue({ label, value }: { label: string; value: unknown }) {
       <div className="mb-4">
         <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{humanize(label)}</div>
         <code className="text-amber-300 bg-amber-900/20 border border-amber-900/40 px-3 py-1.5 rounded font-mono text-sm block break-all">{value}</code>
+      </div>
+    );
+  }
+
+  // HTML content — render in iframe with download option
+  if (typeof value === "string" && isHtml(value)) {
+    const [showPreview, setShowPreview] = useState(true);
+    return (
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-xs text-gray-500 uppercase tracking-wider">{humanize(label)}</div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowPreview(!showPreview)}
+              className="text-xs bg-blue-900/40 hover:bg-blue-800/60 text-blue-300 px-3 py-1 rounded border border-blue-700/50 transition-colors"
+            >
+              {showPreview ? "Hide Preview" : "Show Preview"}
+            </button>
+            <button
+              onClick={() => downloadHtml(value, `output-${Date.now()}.html`)}
+              className="text-xs bg-purple-900/40 hover:bg-purple-800/60 text-purple-300 px-3 py-1 rounded border border-purple-700/50 transition-colors"
+            >
+              ⬇ Download HTML
+            </button>
+          </div>
+        </div>
+        {showPreview && (
+          <iframe
+            srcDoc={value}
+            className="w-full h-[600px] bg-white rounded-lg border-2 border-gray-700"
+            sandbox="allow-same-origin"
+            title={`HTML Preview: ${label}`}
+          />
+        )}
+        {!showPreview && (
+          <div className="text-gray-400 text-xs italic bg-gray-900/40 border border-gray-800 rounded-lg p-3">
+            HTML preview hidden. Click "Show Preview" to display or "Download HTML" to save.
+          </div>
+        )}
       </div>
     );
   }
